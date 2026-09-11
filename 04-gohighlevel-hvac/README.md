@@ -26,7 +26,14 @@ Sub-account: That's Automated Heating and Air (locationId `dF6GpnV3NGdeZSjrnIRl`
 | Afternoon | Email sending domain mail.thatsautomatedhvac.com added, DNS at Namecheap | manual |
 | Evening | Eight workflows built, all in draft | AI draft + manual fix |
 
-Waiting on: A2P 10DLC brand and campaign approval (blocked on EIN confirmation letter), email domain verification.
+| Sep 11 | Email sending domain verified (SPF, DKIM, DMARC, MX, return-path all green) | manual DNS |
+| Sep 11 | Workflows renamed to match this README, HVAC Lead Alert and Update published | manual |
+| Sep 11 | Webhook action added to New Lead Owner Alert posting to n8n (`/webhook/intake-ghl`), see project 07 | manual |
+| Sep 11 | First real form submission: owner alert fired, SMS failed (no A2P), fallback tagged `sms-failed` and emailed, delivered | test |
+| Sep 11 | Voice AI receptionist created and attached to the LC number, three actions | API |
+| Sep 11 | Status sync from Notion moved the opportunity New lead to Contacted | n8n |
+
+Waiting on: A2P 10DLC brand and campaign approval. The EIN was issued online Sep 10; the CP 575 was shown once and not saved. IRS Business Tax Account now offers the notice for download under Tax Records once the sole proprietorship appears on the account, expected within about two weeks of issue.
 
 ## CRM spine
 
@@ -83,7 +90,14 @@ Cost: about $1 for generation plus one revision round.
 |---|---|---|---|
 | @ | A | 162.159.140.166 | site |
 | www | CNAME | vibe.ludicrous.cloud | site (AI Studio host; classic Sites uses sites.ludicrous.cloud) |
-| mail | CNAME/TXT | TODO: paste the DKIM, SPF, DMARC records GHL issued | email sending |
+| mail | TXT | `v=spf1 include:spf.leadconnectorhq.com include:mailgun.org ~all` | SPF |
+| mx._domainkey.mail | TXT | `k=rsa; p=<DKIM public key from GHL>` | DKIM |
+| email.mail | CNAME | mailgun.org | return path / tracking |
+| mail | MX 10 | mxa.mailgun.org | inbound bounces |
+| mail | MX 10 | mxb.mailgun.org | inbound bounces |
+| _dmarc.mail | TXT | `v=DMARC1; p=none;` | DMARC (tighten to quarantine after a few clean sends) |
+
+GHL's Dedicated Domain screen shows all six as Verified. Sender is `reply@mail.thatsautomatedhvac.com`. First test email was Delivered per GHL but landed in Gmail spam; expected for a day-old domain with `p=none`.
 
 ## Workflows
 
@@ -96,11 +110,32 @@ All eight are in draft until A2P clears. Names in GHL should match these (some w
 | 3 | Unbooked Lead Follow-Up | Form submitted, stage New lead | 3 texts over 5 days, each gated on "not yet Booked", stop on reply ON |
 | 4 | Review Request | Stage Job done | 2 h wait, skip if tagged unhappy or stop, review text, tag, stage Review requested |
 | 5 | SMS Fallback to Email | SMS delivery failed | tag sms-failed, resend by email, owner alert |
-| 6 | New Lead Owner Alert | Form submitted | Lead Source = Website form, opportunity New lead, owner alert, acknowledgement text |
+| 6 | New Lead Owner Alert | Form submitted | Lead Source = Website form, opportunity New lead, owner alert, acknowledgement text, webhook to n8n intake |
 | 7 | Tag Stop Requests | SMS reply contains "stop" | tag stop-requested, remove from all workflows |
 | 8 | Flag Unhappy Replies | SMS reply contains unhappy keywords | tag replied-unhappy, remove from Review Request, owner alert |
 
-Full build spec with message text: `hvac-workflow-build-spec.md`.
+Full build spec with message text: `workflow-build-spec.md`.
+
+**Known issue, SMS Fallback to Email:** the `{{message.body}}` merge field resolves to the fallback email's own text rather than the SMS that failed, so the body reads "We tried to reach you by text... We tried to reach you by text...". Swap for the SMS-specific merge field or drop the quoted text.
+
+**Known issue, Voice AI plus Missed Call Text-Back:** GHL logs a call answered by the Voice AI agent as a missed call, so both fire on the same call. Either filter the Missed Call trigger to exclude AI-answered calls, or restrict the agent to after-hours so the two never overlap.
+
+## Voice AI receptionist
+
+Agent "HVAC Receptionist", created through the public API (`POST /voice-ai/agents`) and attached to +1 334-539-0157. Answers 24/7, 10-minute cap, post-call summary saved as a contact note and emailed to admins.
+
+Prompt in brief: identify repair vs maintenance vs installation, ask for equipment brand and age, get name and address, offer to book, no prices, no same-day promises, admits it is automated if asked, emergencies go to the owner.
+
+| Action | Type | Notes |
+|---|---|---|
+| Capture service type | Data extraction | Writes Repair / Maintenance / Installation / Not sure to `contact.service_type`, overwrites |
+| Capture equipment | Data extraction | Writes brand, model, age to `contact.equipment`, does not overwrite |
+| Transfer emergencies to owner | Call transfer | Whisper on, triggers on no-heat, no-cooling for vulnerable people, leaks, or "let me talk to a person" |
+| Book a service call | Appointment booking | Added in the UI; the API rejected the booking action parameters |
+
+First test call (Sep 11): agent captured Service Type = Repair, the contact note and recording were saved, and the Missed Call Text-Back also fired (see known issue).
+
+Cost: Voice AI bills per minute of call time.
 
 ## Costs so far
 
@@ -128,8 +163,9 @@ Voice AI receptionist and Conversation AI (not yet built) are the only recurring
 
 ## Still to do
 
-- Rename workflows to the names above
-- A2P brand + campaign (needs EIN letter): screenshot of the consent checkbox on the live site and the privacy URL are ready
-- Verify email sending domain, paste records into the DNS table
-- Run the email-only test plan, then the SMS test plan after approval
-- Voice AI receptionist, Conversation AI, dashboard, snapshot, Loom
+- A2P brand + campaign (needs the CP 575 from IRS Business Tax Account): screenshot of the consent checkbox on the live site and the privacy URL are ready
+- Email-only test plan scenarios 2 to 4 (booking, job done, unhappy reply); scenario 1 and the SMS fallback are done
+- Fix the two known issues above
+- Add the booking action to the Voice AI agent in the UI
+- SMS test plan after A2P approval
+- Conversation AI, dashboard, snapshot, Loom
