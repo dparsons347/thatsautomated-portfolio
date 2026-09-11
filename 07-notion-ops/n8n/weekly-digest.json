@@ -1,0 +1,184 @@
+{
+  "name": "Weekly Digest",
+  "nodes": [
+    {
+      "name": "Monday 8am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "weeksInterval": 1,
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 8,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Get Projects",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 3,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "getAll",
+        "authentication": "apiKey",
+        "dataSourceId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "<Projects data source id>"
+        },
+        "returnAll": true,
+        "filterType": "none",
+        "simple": true,
+        "options": {}
+      },
+      "alwaysOutputData": true,
+      "credentials": {
+        "notionApi": {
+          "name": "Notion account"
+        }
+      }
+    },
+    {
+      "name": "Get Tasks",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 3,
+      "position": [
+        448,
+        0
+      ],
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "getAll",
+        "authentication": "apiKey",
+        "dataSourceId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "<Tasks data source id>"
+        },
+        "returnAll": true,
+        "filterType": "none",
+        "simple": true,
+        "options": {}
+      },
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "credentials": {
+        "notionApi": {
+          "name": "Notion account"
+        }
+      }
+    },
+    {
+      "name": "Build Digest",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const projects = $('Get Projects').all().map(i => i.json).filter(p => p && p.id);\nconst tasks = $('Get Tasks').all().map(i => i.json).filter(t => t && t.id);\n\nconst now = new Date();\nconst days = n => new Date(now.getTime() - n * 86400000);\nconst weekAgo = days(7);\nconst twoWeeksAgo = days(14);\nconst weekAhead = new Date(now.getTime() + 7 * 86400000);\n\nconst dateOf = v => {\n  if (!v) return null;\n  if (typeof v === 'string') return new Date(v);\n  if (v.start) return new Date(v.start);\n  return null;\n};\nconst link = p => '<' + p.url + '|' + (p.name || 'Untitled') + '>';\nconst openStatuses = ['Inquiry', 'Scoping', 'Proposal sent', 'Active', 'On hold'];\n\nconst created = p => dateOf(p.property_created);\nconst updated = p => dateOf(p.property_updated);\n\nconst newInquiries = projects.filter(p => created(p) && created(p) >= weekAgo);\nconst changed = projects.filter(p => !newInquiries.includes(p) && updated(p) && updated(p) >= weekAgo);\nconst stale = projects.filter(p => ['Inquiry', 'Scoping', 'Proposal sent'].includes(p.property_status) && updated(p) && updated(p) < twoWeeksAgo);\nconst pipeline = openStatuses.map(s => s + ': ' + projects.filter(p => p.property_status === s).length).join('  |  ');\n\nconst dueTasks = tasks.filter(t => t.property_status !== 'Done').filter(t => {\n  const d = dateOf(t.property_due);\n  return d && d <= weekAhead;\n}).sort((a, b) => dateOf(a.property_due) - dateOf(b.property_due));\nconst overdue = dueTasks.filter(t => dateOf(t.property_due) < now);\n\nconst lines = [];\nlines.push(':calendar: *Weekly digest, week of ' + now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + '*');\nlines.push('Pipeline: ' + pipeline);\nlines.push('');\nlines.push('*New this week (' + newInquiries.length + ')*');\nlines.push(newInquiries.length ? newInquiries.map(p => '- ' + link(p) + ' (' + p.property_status + ')').join('\\n') : '- none');\nlines.push('');\nlines.push('*Status changes (' + changed.length + ')*');\nlines.push(changed.length ? changed.map(p => '- ' + link(p) + ' now ' + p.property_status).join('\\n') : '- none');\nlines.push('');\nlines.push('*Stale, no update in 14 days (' + stale.length + ')*');\nlines.push(stale.length ? stale.map(p => '- ' + link(p) + ' (' + p.property_status + ')').join('\\n') : '- none');\nlines.push('');\nlines.push('*Tasks due this week (' + dueTasks.length + ', ' + overdue.length + ' overdue)*');\nlines.push(dueTasks.length ? dueTasks.slice(0, 15).map(t => '- ' + (dateOf(t.property_due) < now ? ':warning: ' : '') + '<' + t.url + '|' + (t.name || 'Untitled') + '> due ' + dateOf(t.property_due).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })).join('\\n') : '- none');\n\nreturn [{ json: { text: lines.join('\\n'), counts: { new: newInquiries.length, changed: changed.length, stale: stale.length, due: dueTasks.length, overdue: overdue.length } } }];\n"
+      }
+    },
+    {
+      "name": "Post Digest to leads",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.7,
+      "position": [
+        896,
+        0
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "authentication": "accessToken",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "#leads"
+        },
+        "messageType": "text",
+        "text": "={{ $json.text }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "mrkdwn": true
+        }
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Monday 8am": {
+      "main": [
+        [
+          {
+            "node": "Get Projects",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Projects": {
+      "main": [
+        [
+          {
+            "node": "Get Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Tasks": {
+      "main": [
+        [
+          {
+            "node": "Build Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Digest": {
+      "main": [
+        [
+          {
+            "node": "Post Digest to leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Chicago",
+    "errorWorkflow": "<Error Handler workflow id>"
+  }
+}

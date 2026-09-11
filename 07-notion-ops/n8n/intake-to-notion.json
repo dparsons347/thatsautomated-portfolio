@@ -1,0 +1,548 @@
+{
+  "name": "Intake to Notion",
+  "nodes": [
+    {
+      "name": "Site Form Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "contact-form",
+        "responseMode": "onReceived",
+        "options": {}
+      }
+    },
+    {
+      "name": "Normalize Site Form",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "n1",
+              "name": "name",
+              "value": "={{ $json.body.name }}",
+              "type": "string"
+            },
+            {
+              "id": "n2",
+              "name": "email",
+              "value": "={{ ($json.body.email || \"\").toLowerCase().trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "n3",
+              "name": "phone",
+              "value": "={{ $json.body.phone || \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "n4",
+              "name": "company",
+              "value": "={{ $json.body.company || \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "n5",
+              "name": "source",
+              "value": "Website form",
+              "type": "string"
+            },
+            {
+              "id": "n6",
+              "name": "project_name",
+              "value": "={{ $json.body.name }} - {{ $json.body.service || \"Inquiry\" }}",
+              "type": "string"
+            },
+            {
+              "id": "n7",
+              "name": "summary",
+              "value": "={{ $json.body.message || \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "n8",
+              "name": "ghl_contact_id",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "n9",
+              "name": "ghl_opportunity_id",
+              "value": "",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Lead",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        448,
+        0
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": true,
+        "assignments": {
+          "assignments": []
+        }
+      }
+    },
+    {
+      "name": "Email Lead To Owner",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        448,
+        192
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "<owner email>",
+        "subject": "=New website lead: {{ $json.name }} - {{ $json.project_name }}",
+        "emailType": "text",
+        "message": "=New lead from thatsautomated.com\n\nName: {{ $json.name }}\nEmail: {{ $json.email }}\nCompany: {{ $json.company }}\n\nMessage:\n{{ $json.summary }}\n\n---\nReply to this email to respond to the lead directly.",
+        "options": {
+          "replyTo": "={{ $json.email }}",
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "name": "GHL Opportunity Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        288
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "intake-ghl",
+        "responseMode": "onReceived",
+        "options": {}
+      }
+    },
+    {
+      "name": "Normalize GHL",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        224,
+        288
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "g1",
+              "name": "name",
+              "value": "={{ $json.body.full_name || (($json.body.first_name || \"\") + \" \" + ($json.body.last_name || \"\")).trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "g2",
+              "name": "email",
+              "value": "={{ ($json.body.email || \"\").toLowerCase().trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "g3",
+              "name": "phone",
+              "value": "={{ $json.body.phone || \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "g4",
+              "name": "company",
+              "value": "={{ $json.body.company_name || \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "g5",
+              "name": "source",
+              "value": "GHL",
+              "type": "string"
+            },
+            {
+              "id": "g6",
+              "name": "project_name",
+              "value": "={{ ($json.body.full_name || \"Lead\") + \" - \" + ($json.body[\"Service Type\"] || $json.body.opportunity_name || \"HVAC\") }}",
+              "type": "string"
+            },
+            {
+              "id": "g7",
+              "name": "summary",
+              "value": "={{ [ $json.body[\"Service Type\"] ? \"Service: \" + $json.body[\"Service Type\"] : \"\", $json.body.Equipment ? \"Equipment: \" + $json.body.Equipment : \"\", $json.body[\"Preferred Contact Channel\"] ? \"Prefers: \" + $json.body[\"Preferred Contact Channel\"] : \"\", \"Stage: \" + ($json.body.pipleline_stage || $json.body.pipeline_stage || \"\") ].filter(Boolean).join(\". \") }}",
+              "type": "string"
+            },
+            {
+              "id": "g8",
+              "name": "ghl_contact_id",
+              "value": "={{ $json.body.contact_id || \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "g9",
+              "name": "ghl_opportunity_id",
+              "value": "={{ $json.body.id || \"\" }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Find Client by Email",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 3,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "getAll",
+        "authentication": "apiKey",
+        "dataSourceId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "<Clients data source id>"
+        },
+        "returnAll": false,
+        "limit": 1,
+        "filterType": "manual",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "key": "Email|email",
+              "condition": "equals",
+              "richTextValue": "={{ $json.email }}"
+            }
+          ]
+        },
+        "simple": true,
+        "options": {}
+      },
+      "alwaysOutputData": true,
+      "credentials": {
+        "notionApi": {
+          "name": "Notion account"
+        }
+      }
+    },
+    {
+      "name": "Client Exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        896,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.id }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "name": "Create Project",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 3,
+      "position": [
+        1344,
+        0
+      ],
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "create",
+        "authentication": "apiKey",
+        "dataSourceId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "<Projects data source id>"
+        },
+        "title": "={{ $('Lead').item.json.project_name }}",
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "Client|relation",
+              "relationValue": [
+                "={{ $json.id }}"
+              ]
+            },
+            {
+              "key": "Status|select",
+              "selectValue": "Inquiry"
+            },
+            {
+              "key": "Type|select",
+              "selectValue": "Client"
+            },
+            {
+              "key": "Summary|rich_text",
+              "textContent": "={{ $('Lead').item.json.summary }}"
+            },
+            {
+              "key": "GHL Opportunity ID|rich_text",
+              "textContent": "={{ $('Lead').item.json.ghl_opportunity_id }}"
+            }
+          ]
+        },
+        "contentType": "blockUi",
+        "blockUi": {},
+        "options": {},
+        "simple": true
+      },
+      "credentials": {
+        "notionApi": {
+          "name": "Notion account"
+        }
+      }
+    },
+    {
+      "name": "Post to leads",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.7,
+      "position": [
+        1568,
+        0
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "authentication": "accessToken",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "#leads"
+        },
+        "messageType": "text",
+        "text": "=:new: *{{ $('Lead').item.json.name }}* ({{ $('Lead').item.json.source }})\n{{ $('Lead').item.json.email }}\nProject: <{{ $json.url }}|{{ $('Lead').item.json.project_name }}>\n{{ $('Lead').item.json.summary }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "mrkdwn": true
+        }
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "name": "Create Client",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 3,
+      "position": [
+        1120,
+        128
+      ],
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "create",
+        "authentication": "apiKey",
+        "dataSourceId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "<Clients data source id>"
+        },
+        "title": "={{ $('Lead').item.json.name }}",
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "Email|email",
+              "emailValue": "={{ $('Lead').item.json.email }}"
+            },
+            {
+              "key": "Phone|phone_number",
+              "phoneValue": "={{ $('Lead').item.json.phone || null }}"
+            },
+            {
+              "key": "Company|rich_text",
+              "textContent": "={{ $('Lead').item.json.company }}"
+            },
+            {
+              "key": "Status|select",
+              "selectValue": "Prospect"
+            },
+            {
+              "key": "Source|select",
+              "selectValue": "={{ $('Lead').item.json.source }}"
+            },
+            {
+              "key": "GHL Contact ID|rich_text",
+              "textContent": "={{ $('Lead').item.json.ghl_contact_id }}"
+            }
+          ]
+        },
+        "contentType": "blockUi",
+        "blockUi": {},
+        "options": {},
+        "simple": true
+      },
+      "credentials": {
+        "notionApi": {
+          "name": "Notion account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Site Form Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Site Form",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Site Form": {
+      "main": [
+        [
+          {
+            "node": "Lead",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Email Lead To Owner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead": {
+      "main": [
+        [
+          {
+            "node": "Find Client by Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GHL Opportunity Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize GHL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize GHL": {
+      "main": [
+        [
+          {
+            "node": "Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Client by Email": {
+      "main": [
+        [
+          {
+            "node": "Client Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Client Exists?": {
+      "main": [
+        [
+          {
+            "node": "Create Project",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create Client",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Project": {
+      "main": [
+        [
+          {
+            "node": "Post to leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Client": {
+      "main": [
+        [
+          {
+            "node": "Create Project",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "<Error Handler workflow id>"
+  }
+}

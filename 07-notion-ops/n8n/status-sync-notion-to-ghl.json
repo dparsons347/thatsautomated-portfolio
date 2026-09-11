@@ -1,0 +1,237 @@
+{
+  "name": "Status Sync (Notion to GHL)",
+  "nodes": [
+    {
+      "name": "Project Updated",
+      "type": "n8n-nodes-base.notionTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "event": "pagedUpdatedInDatabase",
+        "dataSourceId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "<Projects data source id>"
+        }
+      },
+      "credentials": {
+        "notionApi": {
+          "name": "Notion account"
+        }
+      }
+    },
+    {
+      "name": "Map Status to GHL Stage",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "m1",
+              "name": "project_name",
+              "value": "={{ $json.name || $json.Name }}",
+              "type": "string"
+            },
+            {
+              "id": "m2",
+              "name": "notion_status",
+              "value": "={{ $json.Status }}",
+              "type": "string"
+            },
+            {
+              "id": "m3",
+              "name": "opportunity_id",
+              "value": "={{ ($json[\"GHL Opportunity ID\"] || \"\").toString().trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "m4",
+              "name": "stage_id",
+              "value": "={{ ({ \"Inquiry\": \"<New lead stage id>\", \"Scoping\": \"<Contacted stage id>\", \"Proposal sent\": \"<Contacted stage id>\", \"Active\": \"<Booked stage id>\", \"Done\": \"<Job done stage id>\", \"Lost\": \"<New lead stage id>\" })[$json.Status] || \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "m5",
+              "name": "ghl_status",
+              "value": "={{ $json.Status === \"Lost\" ? \"lost\" : \"open\" }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "name": "Has GHL Opportunity and Mapped Stage",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        448,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.opportunity_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "c2",
+              "leftValue": "={{ $json.stage_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "name": "Update GHL Opportunity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://services.leadconnectorhq.com/opportunities/{{ $json.opportunity_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ pipelineStageId: $json.stage_id, status: $json.ghl_status }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpTemplatedCustomAuth": {
+          "name": "GHL Private Integration"
+        }
+      }
+    },
+    {
+      "name": "Log to automation-alerts",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.7,
+      "position": [
+        896,
+        0
+      ],
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "#automation-alerts"
+        },
+        "text": "=:arrows_counterclockwise: Status sync: *{{ $('Map Status to GHL Stage').item.json.project_name }}* is {{ $('Map Status to GHL Stage').item.json.notion_status }} in Notion, GHL opportunity moved.",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "mrkdwn": true
+        }
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Project Updated": {
+      "main": [
+        [
+          {
+            "node": "Map Status to GHL Stage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map Status to GHL Stage": {
+      "main": [
+        [
+          {
+            "node": "Has GHL Opportunity and Mapped Stage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has GHL Opportunity and Mapped Stage": {
+      "main": [
+        [
+          {
+            "node": "Update GHL Opportunity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update GHL Opportunity": {
+      "main": [
+        [
+          {
+            "node": "Log to automation-alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "<Error Handler workflow id>"
+  }
+}
