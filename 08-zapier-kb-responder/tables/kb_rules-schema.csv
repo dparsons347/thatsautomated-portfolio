@@ -1,0 +1,10 @@
+column,type,notes
+rule_id,auto number,
+category,dropdown,"hours, service_area, pricing, scheduling, equipment, maintenance, warranty, payments, other"
+question_pattern,text,the kind of question this answers, one line
+answer,long text,what the customer is told, in the business's voice
+active,checkbox,only active rules are retrieved
+source,dropdown,"seed, human"
+reviewed,checkbox,false when written by the sanitize step
+created_at,date,
+times_used,number,incremented by the responder Zap

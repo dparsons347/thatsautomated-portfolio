@@ -1,0 +1,14 @@
+column,type,notes
+conv_id,auto number,
+received_at,date,
+phone,text,
+first_name,text,
+ghl_contact_id,text,
+message,long text,
+category,text,
+status,dropdown,"ANSWERED, PENDING_HUMAN, ANSWERED_BY_HUMAN, ESCALATED_EMERGENCY, FAILED"
+answer,long text,
+rule_ids,text,comma-separated
+model_raw,long text,"the model's full JSON, for the Loom and for debugging"
+human_answer,long text,filled from the Interfaces form
+reusable,checkbox,set by the owner on the form

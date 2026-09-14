@@ -1,0 +1,14 @@
+RULES (category: {{category}}):
+{{for each rule}} [{{rule_id}}] Q: {{question_pattern}} A: {{answer}} {{end}}
+
+CUSTOMER RECORD:
+first_name: {{first_name}}
+equipment: {{equipment}}
+next_appointment: {{next_appointment}}
+service_plan: {{service_plan}}
+notes: {{notes}}
+(or the single line: NO RECORD ON FILE)
+
+<message>
+{{msg}}
+</message>

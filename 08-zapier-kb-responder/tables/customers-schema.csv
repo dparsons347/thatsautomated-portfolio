@@ -1,0 +1,8 @@
+column,type,notes
+phone,text,E.164, the lookup key
+first_name,text,
+ghl_contact_id,text,
+equipment,text,"e.g. Carrier 3-ton heat pump, 2019"
+next_appointment,text,plain sentence or blank
+service_plan,dropdown,"none, basic, plus"
+notes,long text,anything the owner wants the model to know about this customer

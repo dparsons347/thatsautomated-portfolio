@@ -1,0 +1,20 @@
+category,question_pattern,answer,active,source,reviewed,created_at,times_used
+hours,What are your business hours,"We're open Monday through Friday, 7:30am to 5:30pm, and Saturday 8am to noon. We're closed Sunday.",TRUE,seed,TRUE,2026-09-14,0
+hours,What happens if I need help after hours,"After hours we run an on-call line. If you have no heat, no cooling, or you smell gas, call us at 334-539-0157 and you'll reach the tech on call. Anything that can wait gets a reply the next business morning.",TRUE,seed,TRUE,2026-09-14,0
+service_area,What towns do you serve,"We cover Auburn, Opelika, and the rest of Lee County. We'll go a little outside that for existing customers, so it's worth asking.",TRUE,seed,TRUE,2026-09-14,0
+service_area,Is there a travel or trip charge,"There's no travel charge inside Lee County. Outside it we add a flat $35 trip fee, and we tell you before we come out.",TRUE,seed,TRUE,2026-09-14,0
+pricing,How much is a service call or diagnostic,"A service call is $89. That covers the trip and the diagnosis. If you have us do the repair the same day, the $89 comes off the repair.",TRUE,seed,TRUE,2026-09-14,0
+pricing,How much is a tune-up,"A seasonal tune-up is $129 for one system, and $99 for each additional system at the same address.",TRUE,seed,TRUE,2026-09-14,0
+pricing,Can you quote a repair price over text,"We can't price a repair over text, because it depends on the part and on what the tech finds. The $89 diagnostic gets you a firm price before any work starts.",TRUE,seed,TRUE,2026-09-14,0
+equipment,What brands do you service,"We service every major residential brand, including Carrier, Trane, Lennox, Goodman, Rheem, American Standard, and Mitsubishi mini-splits.",TRUE,seed,TRUE,2026-09-14,0
+equipment,Do you work on commercial systems,"We handle residential and light commercial up to about 10 tons. Anything bigger than that we'll refer you to a company that specializes in it.",TRUE,seed,TRUE,2026-09-14,0
+scheduling,How do I book an appointment,"You can book online at {{booking_link}}, or reply here with a day that works and we'll get you on the schedule.",TRUE,seed,TRUE,2026-09-14,0
+scheduling,When will the tech arrive,"We give a two-hour arrival window, and the tech texts you when he's on the way.",TRUE,seed,TRUE,2026-09-14,0
+scheduling,Can I cancel or reschedule,"No charge to cancel or reschedule, as long as you let us know before the tech is on the way.",TRUE,seed,TRUE,2026-09-14,0
+maintenance,How often should I change my filter,"Change a 1-inch filter every 60 to 90 days, and a 4-inch media filter once a year. If you have pets or allergies, go to the short end of that.",TRUE,seed,TRUE,2026-09-14,0
+maintenance,What should I check before the tech comes out,"Three things fix a surprising number of calls: make sure the thermostat is set and has fresh batteries, check that the breaker for the unit is on, and look at the filter.",TRUE,seed,TRUE,2026-09-14,0
+maintenance,Do you have a maintenance plan,"Our Comfort Plan is $18 a month. It covers two tune-ups a year, priority scheduling, and 15% off repairs.",TRUE,seed,TRUE,2026-09-14,0
+warranty,Do you warranty your work,"Our repairs carry a one-year warranty on labor. Parts carry the manufacturer's warranty, usually five to ten years if the system was registered when it was installed.",TRUE,seed,TRUE,2026-09-14,0
+warranty,Is my system still under warranty,"Whether your system is still covered depends on its age and whether it was registered. Send us the model and serial number off the outdoor unit and we'll look it up.",TRUE,seed,TRUE,2026-09-14,0
+payments,What payment methods do you take,"We take cash, check, and all major credit cards. Payment is due when the work is finished.",TRUE,seed,TRUE,2026-09-14,0
+other,How do I stop receiving texts,"You can reply STOP at any time and we'll stop texting you.",TRUE,seed,TRUE,2026-09-14,0

@@ -1,6 +1,6 @@
 # That's Automated portfolio
 
-Seven working automation builds by Daniel Parsons (thatsautomated.com). Each one is a real system running on real accounts with fake customers. Every workflow has an error path that posts to Slack, every external write is idempotent, and every demo breaks something on camera to show what catches it.
+Eight working automation builds by Daniel Parsons (thatsautomated.com). Each one is a real system running on real accounts with fake customers. Every workflow has an error path that posts to Slack, every external write is idempotent, and every demo breaks something on camera to show what catches it.
 
 Site: https://thatsautomated.com
 
@@ -13,6 +13,7 @@ Site: https://thatsautomated.com
 | 05 | [Microsoft 365](05-microsoft-365/) | Power Automate, Power Query, Power BI | Queued |
 | 06 | [Support triage with a human gate](06-support-triage/) | n8n, LangGraph, Claude API, Slack, LangSmith | Queued |
 | 07 | [Notion operations](07-notion-ops/) | n8n, Notion, GoHighLevel, Slack | Live |
+| 08 | [Zapier knowledge-base responder](08-zapier-kb-responder/) | Zapier Tables, Interfaces, Paths, Claude API, GoHighLevel | In progress |
 
 ## Conventions
 
