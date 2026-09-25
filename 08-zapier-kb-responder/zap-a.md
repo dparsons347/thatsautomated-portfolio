@@ -23,16 +23,18 @@ Also have ready: the Anthropic (Claude) app connected in Zapier with the portfol
 
 Used three times in this Zap (emergency acknowledgement, answer, holding message) and twice in Zap B and C. Build it once and copy it.
 
-**Webhooks by Zapier, Custom Request**
+**Webhooks by Zapier, POST** (not Custom Request)
 
 | Field | Value |
 |---|---|
-| Method | POST |
 | URL | `https://services.leadconnectorhq.com/conversations/messages` |
+| Payload type | json |
+| Data (key/value rows) | `type` = `Email`, `contactId` = contact id from the trigger, `subject`, `html` and `message` = the reply text |
 | Headers | `Authorization: Bearer <GHL Private Integration token>`, `Version: 2021-04-15`, `Content-Type: application/json` |
-| Data | `{"type": "Email", "contactId": "<contact_id from the trigger>", "message": "<the reply text>"}` |
 
-Switch `type` to `SMS` when A2P clears. The SMS shape is the simple one above. The Email shape usually wants a subject and an HTML body as well, so send one by hand from the Zap editor and read the response before wiring it into four places. The token needs the Conversations scope.
+Key/value rows instead of a raw JSON body, so answer text that contains quotes cannot break the request. A good send returns "Email queued successfully" with message and conversation IDs. Outbound mail shows From `hello@thatsautomatedhvac.com`.
+
+The LeadConnector Zapier app has no send-message action, which is why this is a raw POST. Switch `type` to `SMS` (and drop subject/html) when A2P clears. The token needs the Conversations scope, and a contact with Email DND on will reject the send.
 
 ## Steps
 

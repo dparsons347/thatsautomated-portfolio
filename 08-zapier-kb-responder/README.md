@@ -28,7 +28,7 @@ Inbound SMS (GoHighLevel) -> webhook -> Zap A
                   owner alerted                           -> Claude answers or ESCALATE
                                                                  |            |
                                                            reply to      queue page
-                                                           customer      (Interfaces)
+                                                           customer      (queue view)
                                                                               |
                                                                  person answers -> Zap B
                                                                  sanitize -> new rule
@@ -52,14 +52,14 @@ A customer whose number is not on file gets the global tier only. Any question t
 | Zap | Trigger | Does |
 |---|---|---|
 | A. Inbound question responder | Catch Hook from GHL | Logs as PENDING_HUMAN, emergency keyword path, classify, retrieve, answer or escalate |
-| B. Human answer to customer and knowledge base | Tables updated record (`human_answer`) | Sends the person's answer, and if marked reusable, sanitizes it into a new rule |
+| B. Human answer to customer and knowledge base | Tables button click (`send`) | Sends the person's answer, and if marked reusable, sanitizes it into a new rule |
 | C. Responder failed, default to human | Zapier Manager, new Zap error | Sends the holding message, marks the row FAILED, alerts the owner |
 
 Zapier has no workflow export, so [`zaps/`](zaps/) holds screenshots of each Zap instead. The step-by-step build is in the implementation plan.
 
-### Interfaces
+### Queue
 
-One project, "Support queue", two pages. Open questions is a table over `conversations` filtered to PENDING_HUMAN, with a form that writes `human_answer` and `reusable`. Knowledge base is an editable table over `kb_rules` sorted so machine-written rules float to the top. Password protected. Screenshots in [`interfaces/`](interfaces/).
+No Interfaces project. The queue is a saved view on `conversations` called "Escalation queue", filtered to status PENDING_HUMAN or FAILED, sorted newest first, with phone and contact ID hidden. A person opens it from the link in the Slack alert, types the reply in `answer`, ticks `reusable` if it applies, and clicks `send`. The knowledge base is the `kb_rules` table itself, where learned rules show `source = human` and `reviewed` unchecked.
 
 ### Prompts
 
@@ -79,15 +79,15 @@ New rules go live immediately but unreviewed, and the owner can deactivate one i
 
 ## Build checklist
 
-- [ ] Zapier account: confirm Paths, Webhooks, Tables and Interfaces are all available
-- [ ] Three tables created, seeded from `tables/`
-- [ ] Interfaces project, two pages, password protected
-- [ ] GHL workflow "Customer Replied to Zapier" posting to the catch hook
-- [ ] Zap A
-- [ ] Zap B
-- [ ] Zap C, Autoreplay on for Zap A
+- [x] Zapier account: Paths, Webhooks, Tables available
+- [x] Three tables created, seeded from `tables/`
+- [x] Escalation queue view on `conversations`, linked from the Slack alerts
+- [x] GHL workflow "Customer Replied to Zapier" posting to the catch hook
+- [x] Zap A
+- [x] Zap B
+- [x] Zap C
 - [ ] Twelve test cases run, `conversations` screenshotted
-- [ ] Failure injection recorded
+- [x] Failure injection run (model name `x`, Zap C caught it)
 - [ ] Loom (3:00)
 - [ ] Site page, Upwork portfolio item, Zapier back in the Upwork skills list
 
@@ -96,3 +96,5 @@ New rules go live immediately but unreviewed, and the owner can deactivate one i
 - Free Zapier Professional trial started Sep 14, 2026, two weeks. Everything through the Loom has to land inside that window.
 - A2P 10DLC for the HVAC sub-account has not cleared, so the build and the tests run on email. GHL's Customer Replied trigger fires on inbound email too and the reply step posts an email message. Everything else is identical. Swap to SMS for the Loom if A2P lands in time.
 - Task budget: a normal Path B run is about six billable tasks. Twelve tests, a dozen re-runs and the Loom fit inside the Professional tier.
+- Sep 25, 2026: implementation complete. The self-learning loop is proven live: an escalated solar question was answered from the queue, sanitized into a `kb_rules` row with `source = human`, and the same question from the second contact was answered from that rule.
+- Side-by-side n8n version of this build (Slack send-and-wait form instead of a table queue) finished Sep 24.

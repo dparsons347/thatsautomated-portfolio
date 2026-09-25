@@ -2,5 +2,5 @@
 {{message}}
 </question>
 <answer>
-{{human_answer}}
+{{answer}}
 </answer>

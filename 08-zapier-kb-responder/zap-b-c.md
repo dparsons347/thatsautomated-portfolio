@@ -6,29 +6,24 @@ Both reuse the GHL reply step from `zap-a.md`. Build it once, copy it.
 
 ## Zap B: Human answer to customer and knowledge base
 
-### 1. Trigger: Zapier Tables, Updated Record in `conversations`
+### 1. Trigger: Zapier Tables, Button Clicked in `conversations`
 
-Watch the `human_answer` column. Table ID `01M2GQ7V6S75JZH212QC5Y46QP`.
+Table ID `01M2GQ7V6S75JZH212QC5Y46QP`, button column `send`.
 
-**Know the timing before you record.** Tables triggers poll. On the Professional trial that is a couple of minutes, not instant, so there is a visible gap between typing the answer on the queue page and the customer's phone lighting up. Two ways to handle it:
-
-- **Cut the Loom around it.** Honest, and nobody watching expects a live wire.
-- **Use a button field instead.** Zapier Tables has a button field type that fires a Zap on click, which is effectively instant. Add a "Send" button column to `conversations`, put it on the Interfaces page next to the answer box, and trigger Zap B on the button instead of on the update. Verify the button trigger exists in your account before rebuilding around it.
-
-The button is the better demo and the better product. A person typing an answer expects it to send when they say send, not on a two-minute timer.
+Built on the button, not on Updated Record. Tables update triggers poll, so a person typing an answer would wait a couple of minutes for it to go out. The button fires on click, which is what someone expects when they press send. Button columns show in row data but are not writable through Create Record.
 
 ### 2. Filter by Zapier
 
 Continue only if:
 
-- `human_answer` is not empty
+- `answer` is not empty
 - `status` exactly matches `PENDING_HUMAN`
 
 The status condition is what stops this Zap from re-firing every time someone edits a row that has already been answered.
 
 ### 3. Reply to the customer
 
-The GHL webhook step, with `human_answer` as the message and `ghl_contact_id` from the row.
+The GHL webhook step, with the row's `answer` as the message and `ghl_contact_id` from the row.
 
 ### 4. Zapier Tables, Update Record
 
@@ -42,35 +37,30 @@ Continue only if `reusable` is true. Most answers stop here, which is correct. O
 
 ### 6. Anthropic (Claude), Create Message
 
-Prompt 3 from `prompts/03-sanitize-*.txt`. Returns JSON.
+Prompt 3 from `prompts/03-sanitize-*.txt`. `<question>` is the row's `message`, `<answer>` is the row's `answer` (the text the person typed on the queue page). Returns JSON.
 
 ### 7. Code by Zapier, Run JavaScript
 
+Input Data: `claude_response` = the response text from step 6. Map it explicitly; with no input mapped the code parses an empty string and returns blanks without erroring.
+
 ```js
-// inputs: raw  (the model's output from step 6)
-let out = { keep: false, category: 'other', question_pattern: '', rule_text: '', reason: 'parse failed' };
-try {
-  const text = inputData.raw.trim().replace(/^```(?:json)?/, '').replace(/```$/, '');
-  const p = JSON.parse(text);
-  out = {
-    keep: p.keep === true,
-    category: p.category || 'other',
-    question_pattern: p.question_pattern || '',
-    rule_text: p.rule_text || '',
-    reason: p.reason || ''
-  };
-  if (out.keep && (!out.rule_text || !out.question_pattern)) { out.keep = false; out.reason = 'incomplete rule'; }
-} catch (e) {
-  out.reason = 'parse failed: ' + e.message;
-}
-output = [out];
+const raw = (inputData.claude_response || '').replace(/```json|```/g, '').trim();
+let out;
+try { out = JSON.parse(raw); }
+catch (e) { return { keep: 'false', question_pattern: '', answer: '', category: '', parse_error: raw.slice(0, 200) }; }
+return {
+  keep: String(out.keep === true),
+  question_pattern: out.question_pattern || '',
+  answer: out.rule_text || '',
+  category: out.category || 'other'
+};
 ```
 
-Same principle as Zap A's parser, pointed the other way. Every failure resolves to `keep: false`. A parse error means no rule is written, not a garbage rule written.
+Every failure resolves to `keep: false`. A parse error means no rule is written, not a garbage rule written.
 
 ### 8. Filter by Zapier
 
-Continue only if `keep` is true.
+Continue only if `keep` (text) exactly matches `true`.
 
 ### 9. Zapier Tables, Create Record in `kb_rules`
 
@@ -78,20 +68,22 @@ Table ID `01M2GQ74007J03PQ6BJ8JSATY4`.
 
 | Column | Value |
 |---|---|
-| category | from step 7 |
+| category | the conversation row's `category` from the step 1 trigger |
 | question_pattern | from step 7 |
-| answer | `rule_text` from step 7 |
+| answer | `answer` from step 7 (the model's `rule_text`) |
 | active | TRUE |
 | source | human |
 | reviewed | FALSE |
 | created_at | today |
 | times_used | 0 |
 
-`source = human` and `reviewed = FALSE` are what make the knowledge-base page in Interfaces useful: sort by reviewed ascending and every machine-written rule floats to the top for the owner to confirm or switch off.
+**Category comes from the row, not from step 7.** Zap A finds rules by the category its classifier assigns, so a learned rule has to be filed under the category the classifier gave that question. Taking it from the model's generalize output left the first learned rule with a blank category, and Zap A never found it.
 
-### 10. Slack, Send Channel Message
+`source = human` and `reviewed = FALSE` are what make the `kb_rules` table useful to the owner: sort by reviewed ascending and every machine-written rule floats to the top for the owner to confirm or switch off.
 
-To `#automation-alerts`: "New rule added from a human answer, unreviewed: [rule_text]. Review at [Interfaces KB page]."
+### 10. Slack, Send Channel Message (optional, not in the built version)
+
+To `#automation-alerts`: "New rule added from a human answer, unreviewed: [rule_text]."
 
 ### The design choice to state on camera
 
@@ -105,7 +97,9 @@ The point of this Zap: when the responder dies mid-run, the customer still hears
 
 Zapier Manager is a built-in app. Filter to Zap A only, or this Zap will fire on its own errors and on every other Zap in the account.
 
-**The honest limitation:** this trigger polls, so the holding message is not instantaneous. Name that in the Loom rather than hoping nobody notices, and use it to make the comparison the portfolio is built around: this is where a dedicated workflow tool earns its price. In n8n (Project 6) an error workflow fires synchronously, in the same execution, the moment a node throws. Zapier's error handling is a separate polled Zap. Same problem, different tool, real trade-off. That contrast is the most valuable thirty seconds in this whole build, because it shows you choosing tools on their merits rather than selling the one you happen to know.
+**Timing, measured:** this trigger turned out to be instant, not polled. Zap A errored at 10:50:18 and Zap C finished at 10:50:31. The real contrast with n8n is structural: in n8n the error workflow is part of the platform's execution model, while in Zapier it is a separate Zap watching the account.
+
+The editor test for this trigger only returns a static placeholder error, so real sample data has to come from a live run: publish Zap C, then force an error in Zap A.
 
 ### 2. Zapier Tables, Find Records in `conversations`
 
@@ -119,16 +113,16 @@ The GHL webhook step, same holding message as Zap A's B6b: "Thanks, I've passed 
 
 ### 4. Zapier Tables, Update Record
 
-status = `FAILED`, model_raw = the error text from the trigger.
+status = `FAILED`, model_raw = `ZAP ERROR: ` + the trigger's node title + message (inside the 255 character cap). Find Records returns row data under `old.data`; map from the fresh pills, not stale ones left from an earlier sample.
 
 `FAILED` rather than `PENDING_HUMAN` so the two are distinguishable on the queue page. A question nobody answered and a question the machine broke on need different handling by the owner.
 
 ### 5. Slack, Send Channel Message
 
-To `#automation-alerts`: "Responder Zap errored, customer told a person will reply, row [conv_id]." Include the link to the Zap run so it is one click to the stack trace.
+To `#automation-alerts`: "Responder Zap errored, customer told a person will reply, row [conv_id]." Include the failed step, the error text, the row ID, and the Escalation queue link.
 
 ## Testing these two
 
-Zap B is test case 6 followed by 12: let the solar question escalate, answer it on the queue page with the deliberately PII-laden text from `test-cases.md`, watch the sanitized rule land in `kb_rules`, then ask the same question from the second phone and get it answered instantly.
+Zap B is test case 6 followed by 12: let the solar question escalate, answer it on the queue page with the deliberately PII-laden text from `test-cases.md`, watch the sanitized rule land in `kb_rules`, then ask the same question from the second phone and get it answered from the new rule.
 
-Zap C is the killed API key: break the Anthropic connection, send test case 1, and watch the error fire Zap C while Autoreplay retries the original run. Restore the key and show the retry succeed. Two things catch the same failure, one protecting the customer's experience and one protecting the data.
+Zap C is the killed API key: set the model name in Zap A's Claude step to `x` (Anthropic returns 404), send test case 1, and watch the error fire Zap C while Autoreplay retries the original run. Restore the key and show the retry succeed. Two things catch the same failure, one protecting the customer's experience and one protecting the data.
