@@ -8,6 +8,17 @@ Conventions used below:
 - Every SMS is under 160 characters and starts with the business name so it passes the campaign sample messages you submitted.
 - Menu labels in the workflow editor drift. Where a label is given, look for the nearest match.
 
+## As built (Sep 25, 2026)
+
+Where the running build differs from the spec below:
+- **Unbooked Lead Follow-Up:** one trigger only, Pipeline stage changed to New lead in Service Pipeline. The form trigger was removed because New Lead Owner Alert already puts every form lead in New lead, and both triggers together sent touch 1 twice. Each touch sends SMS and email; stop on response only fires on replies to messages this workflow sent, so the email steps matter while SMS is unregistered. Allow multiple opportunities OFF.
+- **Review Request:** Send Email with the review link added after the review SMS. Update Opportunity step sets Pipeline = Service Pipeline, Stage = Review requested (the AI draft left it empty).
+- **New Lead Owner Alert:** re-entry ON.
+- **Flag Unhappy Replies:** trigger channel Email for the demo; owner alert is an Internal Notification of type Email to the owner, not in-app.
+- **SMS Fallback to Email:** body does not quote `{{message.body}}` (empty on this trigger).
+- **Customer Replied to Zapier** (project 08) exists in this sub-account and must be in draft while testing here.
+- Every link and merge field is inserted with the tag picker. Typed or pasted `{{...}}` text can fail silently.
+
 Before building: Automation, Workflows, Create Workflow, Start from Scratch. Name it exactly as shown so the README and Loom script match.
 
 ---
@@ -137,6 +148,8 @@ Note: workflow 3 also triggers on form submission. That is intended; #6 handles 
 ---
 
 ## Test plan (pre-A2P, email only)
+
+Run Sep 25, 2026, all four passed; see README "Test results". Use a fresh contact per run (Gmail plus address, made-up 334-555 number) because re-entry is off on the follow-up sequence.
 
 Temporarily swap each Send SMS for Send Email, or add an email step beside each SMS, and run:
 

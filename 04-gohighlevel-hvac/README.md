@@ -3,6 +3,8 @@
 A complete GoHighLevel deployment for a one-truck residential HVAC company, built as a portfolio demo. Everything in it is real and running: the phone number, texting, booking, follow-up, and review workflows. The company is not.
 
 Live site: https://thatsautomatedhvac.com
+
+**Status: built and tested end to end on email (Sep 25, 2026).** The demo runs on email by design; SMS steps stay in place and fall back to email until the number is A2P registered. Loom still to record.
 Sub-account: That's Automated Heating and Air (locationId `dF6GpnV3NGdeZSjrnIRl`)
 
 ## What this proves
@@ -33,7 +35,25 @@ Sub-account: That's Automated Heating and Air (locationId `dF6GpnV3NGdeZSjrnIRl`
 | Sep 11 | Voice AI receptionist created and attached to the LC number, three actions | API |
 | Sep 11 | Status sync from Notion moved the opportunity New lead to Contacted | n8n |
 
-Waiting on: A2P 10DLC brand and campaign approval. The EIN was issued online Sep 10; the CP 575 was shown once and not saved. IRS Business Tax Account now offers the notice for download under Tax Records once the sole proprietorship appears on the account, expected within about two weeks of issue.
+| Sep 25 | Customer Replied to Zapier (project 08) set to draft so test replies stay inside GHL | manual |
+| Sep 25 | Unbooked Lead Follow-Up cut from 9 AI-added triggers to 1 (stage New lead), inverted second booked check fixed, email step added after each SMS | manual |
+| Sep 25 | Review Request email step added, empty Update Opportunity step given its stage | manual |
+| Sep 25 | New Lead Owner Alert re-entry turned on; unhappy-reply owner alert switched from in-app to email | manual |
+| Sep 25 | Email test plan scenarios 1 to 4 run and passed (results below) | test |
+
+A2P is not needed for the demo. It stays on email; the SMS steps fail over to the SMS Fallback to Email workflow, which is itself part of what the demo shows.
+
+## Test results (Sep 25, 2026, email)
+
+Test lead: "Art Vandelay", `parsodg+hvac1@gmail.com`, 334-555-0142 (a Gmail plus address, so it lands in the same inbox but is a new GHL contact with no workflow history). Unhappy-reply test used the second test contact.
+
+| # | Scenario | Result |
+|---|---|---|
+| 1 | Form submitted | Pass. Contact and opportunity (New lead) created, owner alert, SMS failed and fell back to email, touch 1 "Want to pick a time?" email sent |
+| 1b | Stop on reply | Not proven yet. The reply went out from the base Gmail address and GHL filed it on a different contact. Retest replying from the plus address (Gmail "Send mail as" alias) |
+| 2 | Booking | Pass. Confirmation email with the right date and time, opportunity New lead to Booked in the same minute, event synced to Google Calendar |
+| 3 | Job done | Pass after fix. Review email with the review link, `review-sent` tag, opportunity to Review requested |
+| 4 | Unhappy reply during the review wait | Pass. Keyword matched, `replied-unhappy` tag, removed from Review Request before the review email, owner notified |
 
 ## CRM spine
 
@@ -101,22 +121,25 @@ GHL's Dedicated Domain screen shows all six as Verified. Sender is `reply@mail.t
 
 ## Workflows
 
-All eight are in draft until A2P clears. Names in GHL should match these (some were auto-named by the AI builder and need renaming).
+All published except where noted. Names in GHL match this table.
 
 | # | Name | Trigger | Purpose |
 |---|---|---|---|
 | 1 | Missed Call Text-Back | Missed incoming call | 30 s wait, STOP check, text with booking link, Lead Source = Missed call, opportunity to New lead, owner alert |
-| 2 | Booking Confirmation and Reminders | Service Call confirmed | SMS + email confirmation, opportunity to Booked, reminders 24 h and 2 h before |
-| 3 | Unbooked Lead Follow-Up | Form submitted, stage New lead | 3 texts over 5 days, each gated on "not yet Booked", stop on reply ON |
-| 4 | Review Request | Stage Job done | 2 h wait, skip if tagged unhappy or stop, review text, tag, stage Review requested |
+| 2 | Booking Confirmation and Reminders | Service Call appointment confirmed (calendar auto-confirms) | SMS + email confirmation, opportunity to Booked, reminders 24 h and 2 h before |
+| 3 | Unbooked Lead Follow-Up | Pipeline stage changed to New lead (Service Pipeline) | 3 touches over 5 days, SMS + email each, each gated on "stage is not Booked", stop on response ON, re-entry OFF, multiple opportunities OFF |
+| 4 | Review Request | Pipeline stage changed to Job done | 2 h wait, skip if tagged `replied-unhappy` or `stop-requested`, review SMS + email, tag `review-sent`, stage Review requested |
 | 5 | SMS Fallback to Email | SMS delivery failed | tag sms-failed, resend by email, owner alert |
-| 6 | New Lead Owner Alert | Form submitted | Lead Source = Website form, opportunity New lead, owner alert, acknowledgement text, webhook to n8n intake |
-| 7 | Tag Stop Requests | SMS reply contains "stop" | tag stop-requested, remove from all workflows |
-| 8 | Flag Unhappy Replies | SMS reply contains unhappy keywords | tag replied-unhappy, remove from Review Request, owner alert |
+| 6 | New Lead Owner Alert | Form submitted | Lead Source = Website form, opportunity New lead, owner alert, acknowledgement text, webhook to n8n intake. Re-entry ON so a returning customer alerts the owner again |
+| 7 | Tag Stop Requests | Reply contains "stop" | tag stop-requested, remove from all workflows |
+| 8 | Flag Unhappy Replies | Customer replied, channel Email (switch to any channel once SMS is live) | keyword branch, tag replied-unhappy, remove from Review Request, email alert to the owner |
+| 9 | Customer Replied to Zapier | Customer replied | Webhook to project 08's responder. **Draft** while this demo is being recorded, so replies are not answered twice |
 
-Full build spec with message text: `workflow-build-spec.md`.
+Full build spec with message text: `workflow-build-spec.md` (see "As built" at the top for where the build differs).
 
-**Known issue, SMS Fallback to Email:** the `{{message.body}}` merge field resolves to the fallback email's own text rather than the SMS that failed, so the body reads "We tried to reach you by text... We tried to reach you by text...". Swap for the SMS-specific merge field or drop the quoted text.
+Unbooked Lead Follow-Up originally also triggered on Form submitted. Removed: New Lead Owner Alert already moves every form lead to New lead, so the form trigger enrolled each lead twice and sent touch 1 twice.
+
+**Known issue, SMS Fallback to Email:** `{{message.body}}` comes through empty on this trigger, so the body read "Here is what we sent: ." Fix: drop the quoted text and keep "We tried to reach you by text but it didn't go through. Reply to this email or call +1 (334) 539-0157."
 
 **Known issue, Voice AI plus Missed Call Text-Back:** GHL logs a call answered by the Voice AI agent as a missed call, so both fire on the same call. Either filter the Missed Call trigger to exclude AI-answered calls, or restrict the agent to after-hours so the two never overlap.
 
@@ -159,13 +182,31 @@ Voice AI receptionist and Conversation AI (not yet built) are the only recurring
 - **A2P 10DLC "Sole Proprietor" brand type is for businesses without an EIN.** A sole proprietorship that has an EIN registers as Standard, legal name exactly as on the CP 575.
 - **AI Studio's domain host differs from classic Sites.** The domain had to be disconnected from Settings, Domains and the www CNAME repointed.
 - **The GHL AI workflow builder** drafts linear workflows well and mangles anything with branches on edit: it deleted If/Else nodes, wrapped checks in find-contact/find-opportunity multipath nodes, reordered waits, and rewrote message text. Use it for first drafts of 2, 5, 6; hand-build 1, 3, 4 and the helpers.
+- **The AI builder also over-triggers.** Unbooked Lead Follow-Up came back with nine triggers, including Customer Replied and Opportunity Stagnant in Booked, which re-enrolled booked customers into the unbooked sequence every 3 days. It also inverted one branch (sent the 2nd touch only to booked leads) and left an Update Opportunity step with no fields, which logs "Success" and changes nothing. Check every trigger and every branch after the AI touches a workflow.
+- **Type merge fields with the tag picker, never by hand or paste.** A pasted `{{custom_values.booking_link}}` got auto-linked by the editor and broke with "Issues in your custom variables"; a typed `{{message.body}}` in an email did not resolve.
+- **`{{message.body}}` is empty on email replies and on the SMS-status trigger.** Use the trigger's replied-message field or leave the text out.
+- **Internal Notification type "Notification" is the in-app bell only.** For an owner who is out in the field, use type Email.
+- **Re-entry off is per contact, forever.** A contact that went through a workflow once is silently skipped the next time. Test with fresh contacts (Gmail plus addresses) instead of reusing one.
+- **Stop on response only counts replies that GHL matches to the same contact.** Replying from a different address than the contact's email files the reply elsewhere and the sequence keeps going.
+- **The synced Google Calendar's time zone shows in the customer's invite.** Set it to Central or the invite reads in UTC.
 - **Most GHL screens run in a cross-origin iframe** (form builder, site builder, AI Studio, workflow editor, business profile), which browser automation cannot click into. Pipelines, domains, and the contacts list render in the main app and can be driven. The public API covers fields, tags, custom values, calendars, contacts, and reading workflows, but not pipelines, forms, workflows, sites, or the business profile.
 
 ## Still to do
 
-- A2P brand + campaign (needs the CP 575 from IRS Business Tax Account): screenshot of the consent checkbox on the live site and the privacy URL are ready
-- Email-only test plan scenarios 2 to 4 (booking, job done, unhappy reply); scenario 1 and the SMS fallback are done
-- Fix the two known issues above
+Before recording:
+- Set test waits back: Unbooked Lead Follow-Up first wait 1 hour, Review Request wait 2 hours
+- Review Request re-entry OFF (one review ask per job)
+- Apply the SMS Fallback to Email body fix above
+- Google Calendar time zone to Central
+- Change the booking thank-you text from "A text confirmation is on its way" to "A confirmation is on its way"
+- Retest stop on reply from the plus-address alias
+- Cancel the leftover test appointments (Sep 29 and Sep 30)
+
+Then:
+- Loom (email version of the script)
+- After recording, republish Customer Replied to Zapier or point it at the n8n responder
+
+Later, optional:
+- A2P registration and an SMS rerun
 - Add the booking action to the Voice AI agent in the UI
-- SMS test plan after A2P approval
-- Conversation AI, dashboard, snapshot, Loom
+- Conversation AI, dashboard, snapshot
