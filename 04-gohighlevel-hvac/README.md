@@ -139,7 +139,7 @@ Full build spec with message text: `workflow-build-spec.md` (see "As built" at t
 
 Unbooked Lead Follow-Up originally also triggered on Form submitted. Removed: New Lead Owner Alert already moves every form lead to New lead, so the form trigger enrolled each lead twice and sent touch 1 twice.
 
-**Known issue, SMS Fallback to Email:** `{{message.body}}` comes through empty on this trigger, so the body read "Here is what we sent: ." Fix: drop the quoted text and keep "We tried to reach you by text but it didn't go through. Reply to this email or call +1 (334) 539-0157."
+**Fixed Sep 25, SMS Fallback to Email:** `{{message.body}}` came through empty on this trigger, so the body read "Here is what we sent: ." The quoted text was dropped; the email now reads "We tried to reach you by text but it didn't go through. Reply to this email or call +1 (334) 539-0157." Retested and working.
 
 **Known issue, Voice AI plus Missed Call Text-Back:** GHL logs a call answered by the Voice AI agent as a missed call, so both fire on the same call. Either filter the Missed Call trigger to exclude AI-answered calls, or restrict the agent to after-hours so the two never overlap.
 
@@ -196,7 +196,6 @@ Voice AI receptionist and Conversation AI (not yet built) are the only recurring
 Before recording:
 - Set test waits back: Unbooked Lead Follow-Up first wait 1 hour, Review Request wait 2 hours
 - Review Request re-entry OFF (one review ask per job)
-- Apply the SMS Fallback to Email body fix above
 - Google Calendar time zone to Central
 - Change the booking thank-you text from "A text confirmation is on its way" to "A confirmation is on its way"
 - Retest stop on reply from the plus-address alias

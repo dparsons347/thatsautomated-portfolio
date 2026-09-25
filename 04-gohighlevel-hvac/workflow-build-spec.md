@@ -15,7 +15,7 @@ Where the running build differs from the spec below:
 - **Review Request:** Send Email with the review link added after the review SMS. Update Opportunity step sets Pipeline = Service Pipeline, Stage = Review requested (the AI draft left it empty).
 - **New Lead Owner Alert:** re-entry ON.
 - **Flag Unhappy Replies:** trigger channel Email for the demo; owner alert is an Internal Notification of type Email to the owner, not in-app.
-- **SMS Fallback to Email:** body does not quote `{{message.body}}` (empty on this trigger).
+- **SMS Fallback to Email:** body does not quote `{{message.body}}` (empty on this trigger). Fixed and retested Sep 25.
 - **Customer Replied to Zapier** (project 08) exists in this sub-account and must be in draft while testing here.
 - Every link and merge field is inserted with the tag picker. Typed or pasted `{{...}}` text can fail silently.
 
