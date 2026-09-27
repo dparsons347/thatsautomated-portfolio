@@ -1,0 +1,521 @@
+{
+  "name": "Project 1: Enrich lead",
+  "nodes": [
+    {
+      "name": "From intake",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        144
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "email",
+              "type": "string"
+            },
+            {
+              "name": "name",
+              "type": "string"
+            },
+            {
+              "name": "company",
+              "type": "string"
+            },
+            {
+              "name": "domain",
+              "type": "string"
+            },
+            {
+              "name": "phone",
+              "type": "string"
+            },
+            {
+              "name": "message",
+              "type": "string"
+            },
+            {
+              "name": "source_label",
+              "type": "string"
+            },
+            {
+              "name": "slack_ts",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Pick website",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        144
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const personal = ['gmail.com','googlemail.com','yahoo.com','hotmail.com','outlook.com','live.com','msn.com','aol.com','icloud.com','me.com','mac.com','proton.me','protonmail.com','gmx.com','mail.com','yandex.com','zoho.com','att.net','comcast.net','bellsouth.net','charter.net','sbcglobal.net','verizon.net','cox.net'];\nconst domain = String($json.domain || '').toLowerCase().trim();\nconst isPersonal = personal.includes(domain);\nreturn { json: { ...$json, domain, personal_email: isPersonal, site_url: (!domain || isPersonal) ? '' : 'https://' + domain, fail_reason: !domain ? 'no email domain' : (isPersonal ? 'personal email address, no company site to read' : '') } };"
+      }
+    },
+    {
+      "name": "Has company site?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        448,
+        144
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.site_url }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "name": "Fetch company site",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        672,
+        80
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.site_url }}",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (compatible; ThatsAutomatedLeadBot/1.0; +https://thatsautomated.com)"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "responseFormat": "text",
+              "outputPropertyName": "html"
+            }
+          },
+          "redirect": {
+            "redirect": {
+              "followRedirects": true,
+              "maxRedirects": 5
+            }
+          }
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Extract page text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        80
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const r = $json;\nif (r.error) {\n  const msg = String(r.error.message || r.error.description || r.error || 'request failed');\n  return { json: { page_text: '', fail_reason: 'site unreachable: ' + msg.slice(0, 120) } };\n}\nconst decode = s => s\n  .replace(/&#x([0-9a-f]+);/gi, (m, h) => String.fromCharCode(parseInt(h, 16)))\n  .replace(/&#(\\d+);/g, (m, d) => String.fromCharCode(Number(d)))\n  .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&rsquo;|&lsquo;/g, \"'\").replace(/&rdquo;|&ldquo;|&quot;/g, '\"').replace(/&mdash;/g, '-').replace(/&ndash;/g, '-');\nconst html = String(r.html ?? r.data ?? '');\nconst title = decode((html.match(/<title[^>]*>([\\s\\S]*?)<\\/title>/i) || [])[1] || '');\nconst desc = decode((html.match(/<meta[^>]+name=[\"']description[\"'][^>]+content=[\"']([^\"']*)/i) || [])[1] || '');\nconst text = decode(html\n  .replace(/<script[\\s\\S]*?<\\/script>/gi, ' ')\n  .replace(/<style[\\s\\S]*?<\\/style>/gi, ' ')\n  .replace(/<noscript[\\s\\S]*?<\\/noscript>/gi, ' ')\n  .replace(/<[^>]+>/g, ' '))\n  .replace(/\\s+/g, ' ').trim();\nif (text.length < 200) return { json: { page_text: '', fail_reason: 'site has too little readable text' } };\nreturn { json: { page_text: [title, desc, text].filter(Boolean).join('\\n').slice(0, 8000), fail_reason: '' } };"
+      }
+    },
+    {
+      "name": "Readable page?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1120,
+        80
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.fail_reason }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "name": "Summarize company with Claude",
+      "type": "@n8n/n8n-nodes-langchain.anthropic",
+      "typeVersion": 1,
+      "position": [
+        1344,
+        0
+      ],
+      "parameters": {
+        "resource": "text",
+        "operation": "message",
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "claude-haiku-4-5-20251001",
+          "cachedResultName": "claude-haiku-4-5-20251001"
+        },
+        "messages": {
+          "values": [
+            {
+              "role": "user",
+              "content": "=Company website text:\n\n{{ $json.page_text }}"
+            }
+          ]
+        },
+        "simplify": true,
+        "options": {
+          "system": "You read the text of a small business's public website and describe the business for a sales rep who is about to call them.\n\nReturn ONLY a JSON object, no prose, no code fences, with exactly these keys:\n{\"what_they_do\": string, \"size_hint\": \"1_10\"|\"11_50\"|\"51_200\"|\"200_plus\"|\"unknown\", \"location\": string, \"services\": [string], \"summary\": string}\n\nRules:\n- Use only what the page says. Do not guess or pad.\n- what_they_do: one short phrase, e.g. \"residential and commercial plumbing\".\n- size_hint: based only on explicit signals such as staff counts, number of locations, fleet size, or team pages. If there are none, use \"unknown\".\n- location: city and state if stated, else \"\".\n- services: up to 6 short items.\n- summary: two sentences, under 300 characters, plain words, no marketing language.",
+          "maxTokens": 600,
+          "temperature": 0
+        }
+      },
+      "credentials": {
+        "anthropicApi": {
+          "name": "Anthropic account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Parse summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "if ($json.error) return { json: { enriched: false, fail_reason: 'Claude call failed' } };\nconst c = $json.content;\nlet raw = typeof c === 'string' ? c : Array.isArray(c) ? c.map(p => p.text ?? '').join('') : ($json.text ?? '');\nlet p;\ntry { p = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1)); }\ncatch (err) { return { json: { enriched: false, fail_reason: 'could not parse Claude output' } }; }\nconst sizes = ['1_10', '11_50', '51_200', '200_plus', 'unknown'];\nreturn { json: {\n  enriched: true,\n  fail_reason: '',\n  what_they_do: String(p.what_they_do || ''),\n  size_hint: sizes.includes(p.size_hint) ? p.size_hint : 'unknown',\n  location: String(p.location || ''),\n  services: Array.isArray(p.services) ? p.services.slice(0, 6).map(String) : [],\n  summary: String(p.summary || '').slice(0, 400)\n} };"
+      }
+    },
+    {
+      "name": "Score lead (rules)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1904,
+        144
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "// Lead scoring. Same rules as 01-lead-intake/enrich/enrich.py (score_lead).\nconst lead = $json.lead || {};\nconst enriched = !!$json.enriched;\nconst failReason = $json.fail_reason || lead.fail_reason || 'enrichment unavailable';\nconst sizeHint = enriched ? $json.size_hint : 'unknown';\nconst sizePts = { '1_10': 10, '11_50': 25, '51_200': 30, '200_plus': 20 };\nconst sizeLabel = { '1_10': '1-10', '11_50': '11-50', '51_200': '51-200', '200_plus': '200+', 'unknown': 'unknown' };\nconst message = String(lead.message || '');\nlet score = 20;\nconst why = ['20 base'];\nif (enriched) {\n  score += 20; why.push('+20 company site read');\n  if (sizePts[sizeHint]) { score += sizePts[sizeHint]; why.push(`+${sizePts[sizeHint]} size ${sizeLabel[sizeHint]}`); }\n}\nif (lead.phone) { score += 10; why.push('+10 phone given'); }\nif (lead.company) { score += 5; why.push('+5 company named'); }\nif (message.length > 60) { score += 10; why.push('+10 detailed request'); }\nif (/\\b(today|tomorrow|asap|urgent|emergency|this week|right away)\\b/i.test(message)) { score += 10; why.push('+10 urgency'); }\nif (lead.personal_email) { score -= 10; why.push('-10 personal email'); }\nscore = Math.max(0, Math.min(100, score));\nconst name = lead.name || lead.email || 'lead';\nconst label = String(lead.source_label || '');\nconst retryNote = label.startsWith('Retry') ? ` (${label})` : '';\nconst reasons = why.join(', ');\nconst services = $json.services || [];\nconst location = $json.location || '';\nconst slack_text = enriched\n  ? `:mag: *Enrichment*${retryNote} for ${name}\\n${$json.summary || ''}\\n*Does:* ${$json.what_they_do || 'n/a'} · *Size:* ${sizeLabel[sizeHint] || 'unknown'} · *Location:* ${location || 'n/a'}${services.length ? '\\n*Services:* ' + services.join(', ') : ''}\\n*Lead score:* ${score}/100 (${reasons})`\n  : `:warning: *Enrichment failed*${retryNote} for ${name}: ${failReason}. Scored from the form fields only.\\n*Lead score:* ${score}/100 (${reasons})`;\nreturn { json: {\n  email: lead.email || '',\n  slack_ts: lead.slack_ts || '',\n  lead_score: score,\n  score_reasons: reasons,\n  enrichment_status: enriched ? 'done' : 'failed',\n  company_summary: enriched ? `${$json.summary || ''}${location ? ' (' + location + ')' : ''}` : '',\n  company_size_hint: enriched ? sizeHint : 'unknown',\n  fail_reason: enriched ? '' : failReason,\n  slack_text\n} };"
+      }
+    },
+    {
+      "name": "Write enrichment to HubSpot",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2.2,
+      "position": [
+        2128,
+        144
+      ],
+      "parameters": {
+        "resource": "contact",
+        "operation": "upsert",
+        "authentication": "appToken",
+        "email": "={{ $json.email }}",
+        "additionalFields": {
+          "customPropertiesUi": {
+            "customPropertiesValues": [
+              {
+                "property": "enrichment_status",
+                "value": "={{ $json.enrichment_status }}"
+              },
+              {
+                "property": "lead_score",
+                "value": "={{ $json.lead_score }}"
+              },
+              {
+                "property": "company_summary",
+                "value": "={{ $json.company_summary }}"
+              },
+              {
+                "property": "company_size_hint",
+                "value": "={{ $json.company_size_hint }}"
+              }
+            ]
+          }
+        },
+        "options": {
+          "resolveData": false
+        }
+      },
+      "credentials": {
+        "hubspotAppToken": {
+          "name": "HubSpot Service Key account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 5000
+    },
+    {
+      "name": "Reply in lead thread",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        2352,
+        144
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "C0C16K0KBHC",
+          "cachedResultName": "leads"
+        },
+        "messageType": "text",
+        "text": "={{ $('Score lead (rules)').item.json.slack_text }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "thread_ts": {
+            "replyValues": {
+              "thread_ts": "={{ $('Score lead (rules)').item.json.slack_ts }}",
+              "reply_broadcast": false
+            }
+          }
+        }
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 5000
+    },
+    {
+      "name": "Sticky Note 164e9be7",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1056,
+        144
+      ],
+      "parameters": {
+        "content": "## Enrichment (called by Project 1: Lead intake)\nRuns after the rep has already been alerted, so nobody waits on it. Fetches the company site from the email domain (10 s timeout, 3 tries), strips it to text, has Claude describe the business as JSON, then scores with visible rules. Any failure (personal email, dead site, thin page, bad model output) still scores the lead from the form fields and says why in the Slack thread.",
+        "color": 5
+      }
+    },
+    {
+      "name": "Attach lead",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1680,
+        144
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": true,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "al1",
+              "name": "lead",
+              "value": "={{ $('Pick website').first().json }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "From intake": {
+      "main": [
+        [
+          {
+            "node": "Pick website",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick website": {
+      "main": [
+        [
+          {
+            "node": "Has company site?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has company site?": {
+      "main": [
+        [
+          {
+            "node": "Fetch company site",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Attach lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch company site": {
+      "main": [
+        [
+          {
+            "node": "Extract page text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract page text": {
+      "main": [
+        [
+          {
+            "node": "Readable page?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Readable page?": {
+      "main": [
+        [
+          {
+            "node": "Summarize company with Claude",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Attach lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize company with Claude": {
+      "main": [
+        [
+          {
+            "node": "Parse summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Score lead (rules)": {
+      "main": [
+        [
+          {
+            "node": "Write enrichment to HubSpot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write enrichment to HubSpot": {
+      "main": [
+        [
+          {
+            "node": "Reply in lead thread",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse summary": {
+      "main": [
+        [
+          {
+            "node": "Attach lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach lead": {
+      "main": [
+        [
+          {
+            "node": "Score lead (rules)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Chicago",
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}

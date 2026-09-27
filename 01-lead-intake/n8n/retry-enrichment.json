@@ -1,0 +1,269 @@
+{
+  "name": "Project 1: Retry enrichment",
+  "nodes": [
+    {
+      "name": "Every hour",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1,
+              "triggerAtMinute": 17
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Find unenriched contacts",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2.2,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "resource": "contact",
+        "operation": "search",
+        "authentication": "appToken",
+        "returnAll": false,
+        "limit": 50,
+        "filterGroupsUi": {
+          "filterGroupsValues": [
+            {
+              "filtersUi": {
+                "filterValues": [
+                  {
+                    "propertyName": "enrichment_status|enumeration",
+                    "operator": "EQ",
+                    "value": "failed"
+                  }
+                ]
+              }
+            },
+            {
+              "filtersUi": {
+                "filterValues": [
+                  {
+                    "propertyName": "enrichment_status|enumeration",
+                    "operator": "EQ",
+                    "value": "pending"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "direction": "DESCENDING",
+          "sortBy": "createdate",
+          "properties": [
+            "email",
+            "firstname",
+            "lastname",
+            "company",
+            "phone",
+            "message",
+            "enrichment_status",
+            "createdate",
+            "lead_source_detail"
+          ]
+        }
+      },
+      "credentials": {
+        "hubspotAppToken": {
+          "name": "HubSpot Service Key account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 5000
+    },
+    {
+      "name": "Pick contacts due for retry",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const MAX_RETRIES = 3;\nconst MIN_AGE_MS = 15 * 60 * 1000;\nconst MAX_AGE_MS = 3 * 24 * 60 * 60 * 1000;\nconst store = $getWorkflowStaticData('global');\nif (!store.attempts) store.attempts = {};\nconst now = Date.now();\nfor (const k of Object.keys(store.attempts)) {\n  if (now - (store.attempts[k].first || 0) > MAX_AGE_MS) delete store.attempts[k];\n}\nconst out = [];\nfor (const item of $input.all()) {\n  const p = item.json.properties || {};\n  const email = String(p.email || '').trim().toLowerCase();\n  if (!email) continue;\n  const created = Date.parse(p.createdate || item.json.createdAt || '');\n  if (isNaN(created)) continue;\n  const age = now - created;\n  if (age < MIN_AGE_MS || age > MAX_AGE_MS) continue;\n  const rec = store.attempts[email] || { count: 0, first: now };\n  if (rec.count >= MAX_RETRIES) continue;\n  rec.count += 1;\n  store.attempts[email] = rec;\n  out.push({ json: {\n    email,\n    name: [p.firstname, p.lastname].filter(Boolean).join(' '),\n    company: p.company || '',\n    domain: email.split('@')[1] || '',\n    phone: p.phone || '',\n    message: p.message || '',\n    source_label: 'Retry ' + rec.count + ' of ' + MAX_RETRIES,\n    slack_ts: ''\n  } });\n}\nreturn out;"
+      }
+    },
+    {
+      "name": "Re-run enrichment",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {
+        "mode": "each",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "6E6fA3IQRHXit9cN",
+          "cachedResultName": "Project 1: Enrich lead"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "email": "={{ $json.email }}",
+            "name": "={{ $json.name }}",
+            "company": "={{ $json.company }}",
+            "domain": "={{ $json.domain }}",
+            "phone": "={{ $json.phone }}",
+            "message": "={{ $json.message }}",
+            "source_label": "={{ $json.source_label }}",
+            "slack_ts": "={{ $json.slack_ts }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "company",
+              "displayName": "company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "domain",
+              "displayName": "domain",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "message",
+              "displayName": "message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "source_label",
+              "displayName": "source_label",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "slack_ts",
+              "displayName": "slack_ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Sticky Note 6c9bac60",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ],
+      "parameters": {
+        "content": "## Retry enrichment\nHourly at :17. Finds HubSpot contacts whose enrichment_status is still pending or failed, created between 15 minutes and 3 days ago, and runs Project 1: Enrich lead again one at a time. Each contact gets at most 3 retries (counted in workflow static data, keyed by email, cleared after 3 days). A contact that still fails after that stays marked failed in HubSpot for a person to look at.",
+        "color": 4
+      }
+    }
+  ],
+  "connections": {
+    "Every hour": {
+      "main": [
+        [
+          {
+            "node": "Find unenriched contacts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find unenriched contacts": {
+      "main": [
+        [
+          {
+            "node": "Pick contacts due for retry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick contacts due for retry": {
+      "main": [
+        [
+          {
+            "node": "Re-run enrichment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Chicago"
+  }
+}

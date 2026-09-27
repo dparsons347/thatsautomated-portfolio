@@ -1,0 +1,223 @@
+{
+  "name": "Project 1: Refresh disposable domains",
+  "nodes": [
+    {
+      "name": "Every Sunday 3am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "weeksInterval": 1,
+              "triggerAtDay": [
+                0
+              ],
+              "triggerAtHour": 3,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Fetch blocklist",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        224,
+        96
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://raw.githubusercontent.com/disposable-email-domains/disposable-email-domains/main/disposable_email_blocklist.conf",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text",
+              "outputPropertyName": "data"
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "name": "Split into domains",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const text = $input.first().json.data || '';\nconst domains = [...new Set(text.split(/\\r?\\n/).map(l => l.trim().toLowerCase()).filter(l => l && !l.startsWith('#')))];\nif (domains.length < 1000) {\n  throw new Error(`Blocklist looks wrong: only ${domains.length} domains. Keeping the existing table.`);\n}\nreturn domains.map(domain => ({ json: { domain } }));"
+      }
+    },
+    {
+      "name": "Clear table",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        672,
+        96
+      ],
+      "parameters": {
+        "resource": "table",
+        "operation": "clear",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "m2qpchILrYIu0vze",
+          "cachedResultName": "disposable_domains"
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "name": "Pass domains through",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return $('Split into domains').all();"
+      }
+    },
+    {
+      "name": "Insert domains",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1120,
+        96
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "m2qpchILrYIu0vze",
+          "cachedResultName": "disposable_domains"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "domain": "={{ $json.domain }}"
+          },
+          "schema": [
+            {
+              "id": "domain",
+              "displayName": "domain",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {
+          "optimizeBulk": true
+        }
+      }
+    },
+    {
+      "name": "Run now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        192
+      ],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Every Sunday 3am": {
+      "main": [
+        [
+          {
+            "node": "Fetch blocklist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch blocklist": {
+      "main": [
+        [
+          {
+            "node": "Split into domains",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split into domains": {
+      "main": [
+        [
+          {
+            "node": "Clear table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clear table": {
+      "main": [
+        [
+          {
+            "node": "Pass domains through",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pass domains through": {
+      "main": [
+        [
+          {
+            "node": "Insert domains",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run now": {
+      "main": [
+        [
+          {
+            "node": "Fetch blocklist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Chicago"
+  }
+}

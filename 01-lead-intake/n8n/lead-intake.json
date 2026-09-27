@@ -1,0 +1,1495 @@
+{
+  "name": "Project 1: Lead intake",
+  "nodes": [
+    {
+      "name": "Site form",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        224,
+        272
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lead-intake",
+        "responseMode": "onReceived",
+        "options": {}
+      }
+    },
+    {
+      "name": "Normalize form lead",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        448,
+        272
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f1",
+              "name": "name",
+              "value": "={{ $json.body.name ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "f2",
+              "name": "email",
+              "value": "={{ $json.body.email ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "f3",
+              "name": "phone",
+              "value": "={{ $json.body.phone ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "f4",
+              "name": "company",
+              "value": "={{ $json.body.company ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "f5",
+              "name": "message",
+              "value": "={{ $json.body.message ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "f6",
+              "name": "source",
+              "value": "website_form",
+              "type": "string"
+            },
+            {
+              "id": "f7",
+              "name": "source_label",
+              "value": "Website form",
+              "type": "string"
+            },
+            {
+              "id": "f8",
+              "name": "reject_reason",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "f9",
+              "name": "received_at",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            },
+            {
+              "id": "f10",
+              "name": "simulate_429",
+              "value": "={{ Number($json.body._simulate_429 ?? 0) }}",
+              "type": "number"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Basic checks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const j = { ...$json };\nconst email = String(j.email || '').trim().toLowerCase();\nconst name = String(j.name || '').trim();\nconst reasons = [];\nif (j.reject_reason) reasons.push(j.reject_reason);\nif (!email) reasons.push('missing email');\nelse if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]{2,}$/.test(email)) reasons.push('invalid email');\nif (!name) reasons.push('missing name');\nconst text = `${j.message || ''} ${j.company || ''}`;\nif (/\\b(seo|backlinks?|guest post|crypto|bitcoin|casino|viagra|forex)\\b/i.test(text)) reasons.push('spam keywords');\nif ((text.match(/https?:\\/\\//g) || []).length > 3) reasons.push('too many links');\nconst parts = name.split(/\\s+/);\nreturn { json: { ...j, email, name, domain: email.includes('@') ? email.split('@')[1] : '', first_name: parts[0] || '', last_name: parts.slice(1).join(' '), reject_reason: [...new Set(reasons)].join('; ') } };"
+      }
+    },
+    {
+      "name": "Leads inbox",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        80
+      ],
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "authentication": "oAuth2",
+        "event": "messageReceived",
+        "simple": false,
+        "maxResults": 10,
+        "filters": {
+          "labelIds": [
+            "Label_5558821915812866941"
+          ],
+          "readStatus": "both"
+        },
+        "options": {}
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail thatsautomated"
+        }
+      }
+    },
+    {
+      "name": "Extract lead with Claude",
+      "type": "@n8n/n8n-nodes-langchain.anthropic",
+      "typeVersion": 1,
+      "position": [
+        224,
+        80
+      ],
+      "parameters": {
+        "resource": "text",
+        "operation": "message",
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "claude-haiku-4-5-20251001",
+          "cachedResultName": "claude-haiku-4-5-20251001"
+        },
+        "messages": {
+          "values": [
+            {
+              "role": "user",
+              "content": "=Sender name: {{ $json.from?.value?.[0]?.name ?? \"\" }}\nSender email: {{ $json.from?.value?.[0]?.address ?? \"\" }}\nSubject: {{ $json.subject ?? \"\" }}\n\nBody:\n{{ ($json.text ?? \"\").slice(0, 6000) }}"
+            }
+          ]
+        },
+        "simplify": true,
+        "options": {
+          "system": "You read emails that arrive in a small service business's leads inbox and pull out the prospective customer's details. The email may be written by the customer directly or be a forwarded notification from a lead service such as Angi, Thumbtack, HomeAdvisor, or a referral partner. In a forwarded notification, the customer is the person described inside the notification, not the sender of the email.\n\nReturn ONLY a JSON object, no prose, no code fences, with exactly these keys:\n{\"is_lead\": true|false, \"reject_reason\": string, \"name\": string, \"email\": string, \"phone\": string, \"company\": string, \"message\": string}\n\nRules:\n- is_lead is false for newsletters, marketing, vendor pitches, SEO or link-building offers, receipts, automated notices that contain no customer request, and spam. Put a short reason in reject_reason. Otherwise reject_reason is \"\".\n- Use only information present in the email. Never invent a phone number, company, or email. Use \"\" when a value is not present.\n- email: the customer's email address. If the customer wrote directly, use the sender email.\n- company: the customer's business name if they give one, else \"\".\n- message: one or two sentences describing what the customer wants, in plain words.",
+          "maxTokens": 512,
+          "temperature": 0
+        }
+      },
+      "credentials": {
+        "anthropicApi": {
+          "name": "Anthropic account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 5000
+    },
+    {
+      "name": "Normalize email lead",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        80
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const src = $('Leads inbox').item.json;\nconst sender = src.from?.value?.[0] ?? {};\nlet raw = '';\nconst c = $json.content;\nif (typeof c === 'string') raw = c;\nelse if (Array.isArray(c)) raw = c.map(p => p.text ?? '').join('');\nelse raw = $json.text ?? $json.output ?? $json.message?.content ?? '';\nlet parsed = {};\nlet parseError = '';\ntry {\n  const s = raw.indexOf('{'); const e = raw.lastIndexOf('}');\n  parsed = JSON.parse(raw.slice(s, e + 1));\n} catch (err) { parseError = 'could not parse Claude output'; }\nconst isLead = parsed.is_lead !== false && !parseError;\nreturn { json: {\n  name: parsed.name || sender.name || '',\n  email: parsed.email || sender.address || '',\n  phone: parsed.phone || '',\n  company: parsed.company || '',\n  message: parsed.message || src.subject || '',\n  source: 'Email',\n  source_label: 'Email',\n  reject_reason: isLead ? '' : ('not a lead: ' + (parsed.reject_reason || parseError || 'no reason given')),\n  received_at: $now.toISO(),\n  gmail_id: src.id ?? ''\n} };"
+      }
+    },
+    {
+      "name": "Passed basic checks?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        896,
+        96
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.reject_reason }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "name": "Disposable domain",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1120,
+        0
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "rowExists",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "m2qpchILrYIu0vze",
+          "cachedResultName": "disposable_domains"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "domain",
+              "condition": "eq",
+              "keyValue": "={{ $json.domain }}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Not disposable",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1120,
+        192
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "rowNotExists",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "m2qpchILrYIu0vze",
+          "cachedResultName": "disposable_domains"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "domain",
+              "condition": "eq",
+              "keyValue": "={{ $json.domain }}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Log rejected",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1568,
+        0
+      ],
+      "parameters": {
+        "resource": "sheet",
+        "operation": "append",
+        "authentication": "oAuth2",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1xwUEqJ-taOaMngrZJEshfdLC0_7_XzFeFm4gqMrFk5w",
+          "cachedResultName": "Lead log"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Leads"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{ $json.received_at }}",
+            "source": "={{ $json.source_label }}",
+            "email": "={{ $json.email }}",
+            "name": "={{ $json.name }}",
+            "company": "={{ $json.company }}",
+            "status": "rejected",
+            "reason": "={{ $json.reject_reason }}",
+            "hubspot_id": ""
+          },
+          "schema": [
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "company",
+              "displayName": "company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "reason",
+              "displayName": "reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "hubspot_id",
+              "displayName": "hubspot_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "name": "Google Sheets account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 5000
+    },
+    {
+      "name": "Mark disposable",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1344,
+        0
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": true,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d1",
+              "name": "reject_reason",
+              "value": "=disposable email domain ({{ $json.domain }})",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Create or update contact",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2.2,
+      "position": [
+        1568,
+        400
+      ],
+      "parameters": {
+        "resource": "contact",
+        "operation": "upsert",
+        "authentication": "appToken",
+        "email": "={{ $json.email }}",
+        "additionalFields": {
+          "firstName": "={{ $json.first_name }}",
+          "lastName": "={{ $json.last_name }}",
+          "phoneNumber": "={{ $json.phone }}",
+          "companyName": "={{ $json.company }}",
+          "message": "={{ $json.message }}",
+          "customPropertiesUi": {
+            "customPropertiesValues": [
+              {
+                "property": "lead_source_detail",
+                "value": "={{ $json.source }}"
+              },
+              {
+                "property": "enrichment_status",
+                "value": "pending"
+              }
+            ]
+          }
+        },
+        "options": {
+          "resolveData": false
+        }
+      },
+      "credentials": {
+        "hubspotAppToken": {
+          "name": "HubSpot Service Key account"
+        }
+      },
+      "retryOnFail": false,
+      "maxTries": 4,
+      "waitBetweenTries": 5000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "name": "New contact?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1568,
+        192
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.isNew }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "name": "Create deal",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2.2,
+      "position": [
+        1792,
+        176
+      ],
+      "parameters": {
+        "resource": "deal",
+        "operation": "create",
+        "authentication": "appToken",
+        "stage": "4356009681",
+        "additionalFields": {
+          "dealName": "={{ $('Not disposable').item.json.company || $('Not disposable').item.json.name }} ({{ $('Not disposable').item.json.source_label }})",
+          "pipeline": "default",
+          "description": "={{ $('Not disposable').item.json.message }}",
+          "associatedVids": [
+            "={{ $('Create or update contact').item.json.vid }}"
+          ]
+        }
+      },
+      "credentials": {
+        "hubspotAppToken": {
+          "name": "HubSpot Service Key account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 5000
+    },
+    {
+      "name": "Alert new lead",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        2016,
+        176
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "C0C16K0KBHC",
+          "cachedResultName": "leads"
+        },
+        "messageType": "text",
+        "text": "=:new: *New lead* via {{ $('Not disposable').item.json.source_label }}\n*{{ $('Not disposable').item.json.name }}* · {{ $('Not disposable').item.json.email }}{{ $('Not disposable').item.json.phone ? ' · ' + $('Not disposable').item.json.phone : '' }}\n*Company:* {{ $('Not disposable').item.json.company || '(not given)' }}\n> {{ ($('Not disposable').item.json.message || '(no message)').replace(/\\n+/g, ' ').slice(0, 500) }}\n<https://app-na2.hubspot.com/contacts/247523905/record/0-1/{{ $('Create or update contact').item.json.vid }}|Open in HubSpot> · _enrichment pending_",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 5000
+    },
+    {
+      "name": "Log new lead",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2240,
+        176
+      ],
+      "parameters": {
+        "resource": "sheet",
+        "operation": "append",
+        "authentication": "oAuth2",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1xwUEqJ-taOaMngrZJEshfdLC0_7_XzFeFm4gqMrFk5w",
+          "cachedResultName": "Lead log"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Leads"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{ $('Not disposable').item.json.received_at }}",
+            "source": "={{ $('Not disposable').item.json.source_label }}",
+            "email": "={{ $('Not disposable').item.json.email }}",
+            "name": "={{ $('Not disposable').item.json.name }}",
+            "company": "={{ $('Not disposable').item.json.company }}",
+            "status": "new",
+            "reason": "",
+            "hubspot_id": "={{ $('Create or update contact').item.json.vid }}"
+          },
+          "schema": [
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "company",
+              "displayName": "company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "reason",
+              "displayName": "reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "hubspot_id",
+              "displayName": "hubspot_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "name": "Google Sheets account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 5000
+    },
+    {
+      "name": "Alert updated lead",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1792,
+        368
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "C0C16K0KBHC",
+          "cachedResultName": "leads"
+        },
+        "messageType": "text",
+        "text": "=:arrows_counterclockwise: *Updated lead* (already in HubSpot) via {{ $('Not disposable').item.json.source_label }}\n*{{ $('Not disposable').item.json.name }}* · {{ $('Not disposable').item.json.email }}{{ $('Not disposable').item.json.phone ? ' · ' + $('Not disposable').item.json.phone : '' }}\n*Company:* {{ $('Not disposable').item.json.company || '(not given)' }}\n> {{ ($('Not disposable').item.json.message || '(no message)').replace(/\\n+/g, ' ').slice(0, 500) }}\n<https://app-na2.hubspot.com/contacts/247523905/record/0-1/{{ $('Create or update contact').item.json.vid }}|Open in HubSpot> · _enrichment pending_",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 5000
+    },
+    {
+      "name": "Log updated lead",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2016,
+        368
+      ],
+      "parameters": {
+        "resource": "sheet",
+        "operation": "append",
+        "authentication": "oAuth2",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1xwUEqJ-taOaMngrZJEshfdLC0_7_XzFeFm4gqMrFk5w",
+          "cachedResultName": "Lead log"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Leads"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{ $('Not disposable').item.json.received_at }}",
+            "source": "={{ $('Not disposable').item.json.source_label }}",
+            "email": "={{ $('Not disposable').item.json.email }}",
+            "name": "={{ $('Not disposable').item.json.name }}",
+            "company": "={{ $('Not disposable').item.json.company }}",
+            "status": "updated",
+            "reason": "",
+            "hubspot_id": "={{ $('Create or update contact').item.json.vid }}"
+          },
+          "schema": [
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "company",
+              "displayName": "company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "reason",
+              "displayName": "reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "hubspot_id",
+              "displayName": "hubspot_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "name": "Google Sheets account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 5000
+    },
+    {
+      "name": "Sticky Note d39d64d2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1056,
+        368
+      ],
+      "parameters": {
+        "content": "## Lead intake\nTwo sources, one pipeline: site form webhook (POST /webhook/lead-intake) and the leads/inbound Gmail label (Claude pulls the lead out of the email). Junk filter, disposable-domain check, HubSpot upsert by email (dedupe), deal on new contacts only, Slack alert to #leads, every lead logged to the Lead log sheet. New leads kick off 'Project 1: Enrich lead' without waiting, so the rep is never held up by enrichment.",
+        "color": 4
+      }
+    },
+    {
+      "name": "Start enrichment",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2240,
+        16
+      ],
+      "parameters": {
+        "mode": "each",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "6E6fA3IQRHXit9cN",
+          "cachedResultName": "Project 1: Enrich lead"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "email": "={{ $('Not disposable').item.json.email }}",
+            "name": "={{ $('Not disposable').item.json.name }}",
+            "company": "={{ $('Not disposable').item.json.company }}",
+            "domain": "={{ $('Not disposable').item.json.domain }}",
+            "phone": "={{ $('Not disposable').item.json.phone }}",
+            "message": "={{ $('Not disposable').item.json.message }}",
+            "source_label": "={{ $('Not disposable').item.json.source_label }}",
+            "slack_ts": "={{ $('Alert new lead').item.json.message.ts }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "company",
+              "displayName": "company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "domain",
+              "displayName": "domain",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "message",
+              "displayName": "message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "source_label",
+              "displayName": "source_label",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "slack_ts",
+              "displayName": "slack_ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      }
+    },
+    {
+      "name": "HubSpot test hook",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        400
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const lead = $('Not disposable').item.json;\nconst forced = Number(lead.simulate_429 || 0);\nif ($runIndex < forced) {\n  throw new Error(`HubSpot returned 429 Too Many Requests (simulated by test hook, forced failure ${$runIndex + 1} of ${forced})`);\n}\nreturn { json: lead };"
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "name": "Plan retry",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1792,
+        608
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const lead = $('Not disposable').item.json;\nconst attempt = $runIndex + 1;\nconst err = String($json.error?.message ?? $json.error ?? JSON.stringify($json)).slice(0, 300);\nreturn { json: {\n  attempt,\n  retry: attempt < 4,\n  wait_s: 2 ** attempt,\n  error: err,\n  email: lead.email, name: lead.name, company: lead.company, phone: lead.phone,\n  message: lead.message, source_label: lead.source_label, received_at: lead.received_at\n} };"
+      }
+    },
+    {
+      "name": "Retries left?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2016,
+        608
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.retry }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "name": "Back off",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2240,
+        528
+      ],
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": "={{ $json.wait_s }}",
+        "unit": "seconds"
+      }
+    },
+    {
+      "name": "Alert HubSpot write failed",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        2240,
+        720
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "#automation-alerts"
+        },
+        "messageType": "text",
+        "text": "=:rotating_light: *HubSpot write failed after {{ $json.attempt }} attempts.* This lead is NOT in the CRM, handle it by hand.\n*{{ $json.name }}* · {{ $json.email }}{{ $json.phone ? ' · ' + $json.phone : '' }}\n*Company:* {{ $json.company || '(not given)' }}\n> {{ ($json.message || '(no message)').replace(/\\n+/g, ' ').slice(0, 500) }}\nSource: {{ $json.source_label }} · received {{ $json.received_at }}\nLast error: `{{ $json.error }}`",
+        "otherOptions": {
+          "includeLinkToWorkflow": true
+        }
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 5000
+    },
+    {
+      "name": "Log failed write",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2464,
+        720
+      ],
+      "parameters": {
+        "resource": "sheet",
+        "operation": "append",
+        "authentication": "oAuth2",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1xwUEqJ-taOaMngrZJEshfdLC0_7_XzFeFm4gqMrFk5w",
+          "cachedResultName": "Lead log"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Leads"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{ $('Plan retry').item.json.received_at }}",
+            "source": "={{ $('Plan retry').item.json.source_label }}",
+            "email": "={{ $('Plan retry').item.json.email }}",
+            "name": "={{ $('Plan retry').item.json.name }}",
+            "company": "={{ $('Plan retry').item.json.company }}",
+            "status": "failed",
+            "reason": "=HubSpot write failed after {{ $('Plan retry').item.json.attempt }} attempts: {{ $('Plan retry').item.json.error }}",
+            "hubspot_id": ""
+          },
+          "schema": [
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "company",
+              "displayName": "company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "reason",
+              "displayName": "reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "hubspot_id",
+              "displayName": "hubspot_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "name": "Google Sheets account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 5000
+    },
+    {
+      "name": "Backoff note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        780
+      ],
+      "parameters": {
+        "content": "## HubSpot write with backoff\nAny HubSpot error (429, 5xx, timeout) goes to Plan retry: waits 2, 4, 8 s and tries again, 4 attempts total. After the 4th failure the full lead is posted to #automation-alerts and logged as 'failed' so nothing disappears.\n\n**Test hook:** passes straight through unless the form payload has `_simulate_429: N`, then it fails the first N attempts with a fake 429. Used only for the Loom.",
+        "color": 3,
+        "width": 420,
+        "height": 220
+      }
+    }
+  ],
+  "connections": {
+    "Site form": {
+      "main": [
+        [
+          {
+            "node": "Normalize form lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize form lead": {
+      "main": [
+        [
+          {
+            "node": "Basic checks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic checks": {
+      "main": [
+        [
+          {
+            "node": "Passed basic checks?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leads inbox": {
+      "main": [
+        [
+          {
+            "node": "Extract lead with Claude",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract lead with Claude": {
+      "main": [
+        [
+          {
+            "node": "Normalize email lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize email lead": {
+      "main": [
+        [
+          {
+            "node": "Basic checks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Passed basic checks?": {
+      "main": [
+        [
+          {
+            "node": "Disposable domain",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Not disposable",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Disposable domain": {
+      "main": [
+        [
+          {
+            "node": "Mark disposable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark disposable": {
+      "main": [
+        [
+          {
+            "node": "Log rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create or update contact": {
+      "main": [
+        [
+          {
+            "node": "New contact?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Plan retry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "New contact?": {
+      "main": [
+        [
+          {
+            "node": "Create deal",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert updated lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create deal": {
+      "main": [
+        [
+          {
+            "node": "Alert new lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert new lead": {
+      "main": [
+        [
+          {
+            "node": "Log new lead",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Start enrichment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert updated lead": {
+      "main": [
+        [
+          {
+            "node": "Log updated lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Not disposable": {
+      "main": [
+        [
+          {
+            "node": "HubSpot test hook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HubSpot test hook": {
+      "main": [
+        [
+          {
+            "node": "Create or update contact",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Plan retry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan retry": {
+      "main": [
+        [
+          {
+            "node": "Retries left?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retries left?": {
+      "main": [
+        [
+          {
+            "node": "Back off",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert HubSpot write failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Back off": {
+      "main": [
+        [
+          {
+            "node": "HubSpot test hook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert HubSpot write failed": {
+      "main": [
+        [
+          {
+            "node": "Log failed write",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Chicago"
+  }
+}

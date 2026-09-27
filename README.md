@@ -6,7 +6,7 @@ Site: https://thatsautomated.com
 
 | # | Project | Stack | Status |
 |---|---|---|---|
-| 01 | [Lead intake to HubSpot](01-lead-intake/) | n8n, HubSpot, Facebook Lead Ads, Python, Claude API | Queued |
+| 01 | [Lead intake to HubSpot](01-lead-intake/) | n8n, HubSpot, Gmail, Slack, Python, Claude API | Built, Loom pending |
 | 02 | [Documents to QuickBooks](02-documents-quickbooks/) | n8n, DocuSign, QuickBooks Online, Claude API | Queued |
 | 03 | [Shopify orders](03-shopify-orders/) | n8n, Shopify, Stripe, Postgres | Queued |
 | 04 | [GoHighLevel HVAC build](04-gohighlevel-hvac/) | GoHighLevel, A2P 10DLC, Voice AI | In progress |
