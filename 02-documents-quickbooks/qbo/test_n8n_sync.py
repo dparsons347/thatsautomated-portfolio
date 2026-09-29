@@ -96,7 +96,7 @@ class ReviewAndGenerationExports(unittest.TestCase):
         self.assertIn("Not handled yet", wf["connections"]["Find agreement"]["main"][0][0]["node"])
 
     def test_no_credential_ids_or_instance_ids(self):
-        for name in ["send-to-review.json", "review-approvals.json", "agreement-out.json", "agreement-events.json"]:
+        for name in ["send-to-review.json", "review-approvals.json", "agreement-out.json", "agreement-events.json", "reset-demo-data.json"]:
             text = json.dumps(load(name))
             for secret in ["vw475ktJsCO6X7PO", "u3SlEo4UxfNvTCZl", "1zAonurq6zXaEEmo23TyW0uhbGinP6xhSTvvnEzc_GpU",
                            "f2ffdd09-2663-40b1-849e-6a61da7fbf8f", "danielparsons.io"]:

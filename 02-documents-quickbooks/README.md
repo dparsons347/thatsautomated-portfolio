@@ -132,6 +132,7 @@ n8n/
   review-approvals.json
   agreement-out.json
   agreement-events.json
+  reset-demo-data.json   manual only: deletes the demo Bills, rows, sheet entries, deals and signed PDFs
 test-data/            the five sample bills, expected results, generator script
 ```
 
@@ -156,6 +157,7 @@ Credential IDs are stripped from `n8n/document-intake.json`. After importing:
 
 5. Review sheet: make a Google Sheet with a `Review queue` tab and the header row `row_id, received, vendor, invoice_number, invoice_date, due_date, total, tax, why_review, warnings, claude_notes, email_link, approve, result, updated`. Put its ID in `send-to-review.json` and `review-approvals.json`, set the tab's gid in the "Checkbox and highlight" node (0 for the first tab) and your AP mailbox in the email link. Do not pre-fill checkboxes down the sheet (see the notes below).
 6. Agreements: create a `p2_agreements` data table (`agreement_number, company, signer_name, signer_email, price (number), deposit (number), envelope_id, hubspot_deal_id, status, sent_at, signed_at, drive_file_id, drive_link, error`), a Drive folder for signed copies, and a DocuSign OAuth2 credential (generic OAuth2, `account-d.docusign.com`, scope `signature`). Fill in the DocuSign account ID, your n8n host, the folder ID and your HubSpot Contacted, Won and Lost stage IDs.
+7. Optional: `n8n/reset-demo-data.json` puts everything back to empty between demo runs. It deletes every Bill that a `p2_documents` row points at, then all document rows, clears the review sheet below the header, deletes the HubSpot deal and Drive file for each agreement row, and then the agreement rows. Fill in the same realm ID, sheet ID, gid and table IDs. It only has a manual trigger, so leave it unpublished.
 
 Posting uses HTTP Request nodes on the QuickBooks credential rather than the QuickBooks node, because the node can't set the invoice number (DocNumber), takes a fixed number of lines, and can't attach files.
 

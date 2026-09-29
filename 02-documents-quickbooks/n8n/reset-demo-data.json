@@ -1,0 +1,416 @@
+{
+  "name": "P2: Reset demo data",
+  "nodes": [
+    {
+      "name": "Run reset",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {}
+    },
+    {
+      "name": "Documents with a Bill",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        224,
+        200
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_p2_documents_TABLE_ID",
+          "cachedResultName": "p2_documents"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "qbo_bill_id",
+              "condition": "isNotEmpty"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "name": "QBO: get Bill",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        448,
+        200
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://sandbox-quickbooks.api.intuit.com/v3/company/REPLACE_WITH_REALM_ID/bill/{{ $json.qbo_bill_id }}?minorversion=75",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "quickBooksOAuth2Api",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "quickBooksOAuth2Api": {
+          "name": "QuickBooks Online account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "QBO: delete Bill",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        672,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://sandbox-quickbooks.api.intuit.com/v3/company/REPLACE_WITH_REALM_ID/bill?operation=delete&minorversion=75",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "quickBooksOAuth2Api",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ Id: $json.Bill.Id, SyncToken: $json.Bill.SyncToken }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "quickBooksOAuth2Api": {
+          "name": "QuickBooks Online account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Delete all document rows",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        896,
+        200
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "deleteRows",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_p2_documents_TABLE_ID",
+          "cachedResultName": "p2_documents"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "gte",
+              "keyValue": "0"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "name": "Clear review sheet",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1120,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://sheets.googleapis.com/v4/spreadsheets/REPLACE_WITH_REVIEW_SHEET_ID/values/Review%20queue!A2:O1000:clear",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "name": "Google Sheets account"
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "name": "Remove checkboxes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1344,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://sheets.googleapis.com/v4/spreadsheets/REPLACE_WITH_REVIEW_SHEET_ID:batchUpdate",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "{\"requests\":[{\"setDataValidation\":{\"range\":{\"sheetId\":0,\"startRowIndex\":1,\"endRowIndex\":1000,\"startColumnIndex\":12,\"endColumnIndex\":13}}}]}",
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "name": "Google Sheets account"
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "name": "Agreements",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1568,
+        200
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_p2_agreements_TABLE_ID",
+          "cachedResultName": "p2_agreements"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "gte",
+              "keyValue": "0"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "name": "HubSpot: delete deal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1792,
+        200
+      ],
+      "parameters": {
+        "method": "DELETE",
+        "url": "=https://api.hubapi.com/crm/v3/objects/deals/{{ $json.hubspot_deal_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "hubspotAppToken",
+        "options": {}
+      },
+      "credentials": {
+        "hubspotAppToken": {
+          "name": "HubSpot Service Key account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Drive: delete signed PDF",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2016,
+        200
+      ],
+      "parameters": {
+        "method": "DELETE",
+        "url": "=https://www.googleapis.com/drive/v3/files/{{ $(\"Agreements\").item.json.drive_file_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Delete all agreement rows",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2240,
+        200
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "deleteRows",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_p2_agreements_TABLE_ID",
+          "cachedResultName": "p2_agreements"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "gte",
+              "keyValue": "0"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "executeOnce": true
+    }
+  ],
+  "connections": {
+    "Run reset": {
+      "main": [
+        [
+          {
+            "node": "Documents with a Bill",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Documents with a Bill": {
+      "main": [
+        [
+          {
+            "node": "QBO: get Bill",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QBO: get Bill": {
+      "main": [
+        [
+          {
+            "node": "QBO: delete Bill",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QBO: delete Bill": {
+      "main": [
+        [
+          {
+            "node": "Delete all document rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete all document rows": {
+      "main": [
+        [
+          {
+            "node": "Clear review sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clear review sheet": {
+      "main": [
+        [
+          {
+            "node": "Remove checkboxes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Remove checkboxes": {
+      "main": [
+        [
+          {
+            "node": "Agreements",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agreements": {
+      "main": [
+        [
+          {
+            "node": "HubSpot: delete deal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HubSpot: delete deal": {
+      "main": [
+        [
+          {
+            "node": "Drive: delete signed PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drive: delete signed PDF": {
+      "main": [
+        [
+          {
+            "node": "Delete all agreement rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Chicago"
+  }
+}
