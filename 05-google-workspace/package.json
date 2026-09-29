@@ -1,0 +1,10 @@
+{
+  "name": "oakline-intake",
+  "private": true,
+  "description": "Project 5: Google Workspace intake automation (Apps Script)",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "push": "clasp push",
+    "check": "node --check apps-script/Lib.js && node --check apps-script/Main.js && node --check apps-script/Setup.js"
+  }
+}
