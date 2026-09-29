@@ -1,0 +1,683 @@
+{
+  "name": "P2: Document intake",
+  "nodes": [
+    {
+      "name": "AP Intake inbox",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        192
+      ],
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "authentication": "oAuth2",
+        "event": "messageReceived",
+        "simple": false,
+        "maxResults": 10,
+        "filters": {
+          "labelIds": [
+            "REPLACE_WITH_AP_INTAKE_LABEL_ID"
+          ],
+          "readStatus": "both"
+        },
+        "options": {
+          "downloadAttachments": true,
+          "dataPropertyAttachmentsPrefixName": "attachment_"
+        }
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail (AP inbox)"
+        }
+      }
+    },
+    {
+      "name": "Split attachments",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// One item per usable attachment. PDFs and images only; small images are\n// skipped because they are almost always email signature logos.\nconst DOC_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'image/webp'];\nconst MIN_IMAGE_BYTES = 20000;\nconst out = [];\nconst items = $input.all();\nfor (let i = 0; i < items.length; i++) {\n  const item = items[i];\n  const j = item.json;\n  const sender = j.from?.value?.[0]?.address ?? j.from?.text ?? '';\n  const base = {\n    gmail_message_id: j.id ?? '',\n    sender,\n    subject: j.subject ?? '',\n    received_at: j.date ? new Date(j.date).toISOString() : new Date().toISOString(),\n  };\n  const keys = Object.keys(item.binary ?? {})\n    .filter(k => k.startsWith('attachment_'))\n    .sort((a, b) => Number(a.split('_')[1]) - Number(b.split('_')[1]));\n  const skipped = [];\n  let found = 0;\n  for (const key of keys) {\n    const bin = item.binary[key];\n    const name = bin.fileName ?? key;\n    let mime = String(bin.mimeType ?? '').toLowerCase();\n    if (mime === 'image/jpg') mime = 'image/jpeg';\n    if (mime === 'application/octet-stream' && /\\.pdf$/i.test(name)) mime = 'application/pdf';\n    const buf = await this.helpers.getBinaryDataBuffer(i, key);\n    if (!DOC_TYPES.includes(mime)) { skipped.push(`${name} (${mime || 'unknown type'})`); continue; }\n    if (mime.startsWith('image/') && buf.length < MIN_IMAGE_BYTES) { skipped.push(`${name} (small image, likely a logo)`); continue; }\n    found++;\n    out.push({\n      json: { ...base, attachment_index: Number(key.split('_')[1]), filename: name, mime_type: mime,\n              size_bytes: buf.length, file_b64: buf.toString('base64') },\n      binary: { data: bin },\n      pairedItem: { item: i },\n    });\n  }\n  if (!found) out.push({ json: { ...base, no_document: true, skipped: skipped.join(', ') || 'no attachments' }, pairedItem: { item: i } });\n}\nreturn out;"
+      }
+    },
+    {
+      "name": "Has a document?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        448,
+        192
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.no_document === true }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "name": "SHA-256 of file",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [
+        672,
+        96
+      ],
+      "parameters": {
+        "action": "hash",
+        "type": "SHA256",
+        "binaryData": true,
+        "binaryPropertyName": "data",
+        "dataPropertyName": "sha256",
+        "encoding": "hex"
+      }
+    },
+    {
+      "name": "Alert: no invoice attached",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.7,
+      "position": [
+        672,
+        288
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "authentication": "accessToken",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "#automation-alerts"
+        },
+        "messageType": "text",
+        "text": "=:paperclip: *AP Intake email with no invoice attached*\nFrom: {{ $json.sender }}\nSubject: {{ $json.subject }}\nSkipped: {{ $json.skipped }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "mrkdwn": true
+        }
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "name": "Already seen",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        896,
+        0
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "rowExists",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_p2_documents_TABLE_ID",
+          "cachedResultName": "p2_documents"
+        },
+        "matchType": "anyCondition",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "sha256",
+              "condition": "eq",
+              "keyValue": "={{ $json.sha256 }}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Log duplicate",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1120,
+        0
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_p2_documents_TABLE_ID",
+          "cachedResultName": "p2_documents"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "sha256": "={{ $json.sha256 }}",
+            "filename": "={{ $json.filename }}",
+            "mime_type": "={{ $json.mime_type }}",
+            "size_bytes": "={{ $json.size_bytes }}",
+            "gmail_message_id": "={{ $json.gmail_message_id }}",
+            "attachment_index": "={{ $json.attachment_index }}",
+            "sender": "={{ $json.sender }}",
+            "subject": "={{ $json.subject }}",
+            "received_at": "={{ $json.received_at }}",
+            "status": "duplicate",
+            "review_reasons": "same file (SHA-256) already received"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      }
+    },
+    {
+      "name": "New file",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        896,
+        192
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "rowNotExists",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_p2_documents_TABLE_ID",
+          "cachedResultName": "p2_documents"
+        },
+        "matchType": "anyCondition",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "sha256",
+              "condition": "eq",
+              "keyValue": "={{ $json.sha256 }}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Build Claude request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const PROMPT = \"You read one vendor bill or invoice (a PDF or a photo) that was sent to our company, and you transcribe it into JSON.\\n\\nReport what the document says. Do not correct arithmetic, do not fill in values that are not on the page, and do not guess. If a value is missing or unreadable, use null. The bill-to company is us, the customer. The vendor is the business that issued the bill.\\n\\nReturn ONLY this JSON object, with no text before or after it:\\n\\n{\\n  \\\"document_type\\\": \\\"invoice\\\" | \\\"credit_memo\\\" | \\\"statement\\\" | \\\"receipt\\\" | \\\"other\\\",\\n  \\\"vendor\\\": {\\\"name\\\": string|null, \\\"address\\\": string|null, \\\"email\\\": string|null, \\\"phone\\\": string|null},\\n  \\\"invoice_number\\\": string|null,\\n  \\\"invoice_date\\\": \\\"YYYY-MM-DD\\\"|null,\\n  \\\"due_date\\\": \\\"YYYY-MM-DD\\\"|null,\\n  \\\"terms\\\": string|null,\\n  \\\"po_number\\\": string|null,\\n  \\\"currency\\\": three-letter code, \\\"USD\\\" if no other currency is shown,\\n  \\\"line_items\\\": [{\\\"description\\\": string, \\\"quantity\\\": number|null, \\\"unit_price\\\": number|null, \\\"amount\\\": number|null}],\\n  \\\"subtotal\\\": number|null,\\n  \\\"tax\\\": number|null,\\n  \\\"total\\\": number|null,\\n  \\\"handwritten\\\": true if any of the values above were written by hand,\\n  \\\"confidence\\\": {\\\"vendor\\\": 0-1, \\\"invoice_number\\\": 0-1, \\\"invoice_date\\\": 0-1, \\\"line_items\\\": 0-1, \\\"total\\\": 0-1},\\n  \\\"notes\\\": short string for a bookkeeper: crossed-out values, digits that could be read two ways, stamps, anything odd\\n}\\n\\nRules:\\n- Amounts are plain numbers: no currency symbols, no thousands separators.\\n- The total is the amount the document says is due, exactly as written, even if it does not match the lines.\\n- Confidence is how sure you are that you read the value correctly from the page, not whether the math is right. Lower it for blur, glare, skew, handwriting you had to interpret, or characters that could be read more than one way.\\n- Leave out rows that are only notes (for example \\\"labor, no tax\\\") from line_items and mention them in notes instead.\\n\";\nconst kind = $json.mime_type === 'application/pdf' ? 'document' : 'image';\nconst { file_b64, ...meta } = $json;\nreturn {\n  json: {\n    ...meta,\n    claude_request: {\n      model: 'claude-sonnet-5-5',\n      max_tokens: 2000,\n      system: PROMPT,\n      messages: [{\n        role: 'user',\n        content: [\n          { type: kind, source: { type: 'base64', media_type: $json.mime_type, data: file_b64 } },\n          { type: 'text', text: 'Transcribe this bill.' },\n        ],\n      }],\n    },\n  },\n};"
+      }
+    },
+    {
+      "name": "Read invoice with Claude",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1344,
+        192
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "anthropicApi",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.claude_request) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "credentials": {
+        "anthropicApi": {
+          "name": "Anthropic account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "name": "Collect result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const { claude_request, ...meta } = $('Build Claude request').item.json;\nconst text = ($json.content ?? []).filter(c => c.type === 'text').map(c => c.text).join('');\nreturn { json: { ...meta, claude_text: text, model: $json.model ?? claude_request.model, stop_reason: $json.stop_reason ?? '' } };"
+      }
+    },
+    {
+      "name": "Validate extraction",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1792,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "pythonNative",
+        "pythonCode": "# Parse and check what Claude read off an invoice.\n#\n# This file is pasted as-is into the \"Validate extraction\" Python Code node in\n# n8n, so it sticks to what that sandbox allows: json, re, datetime and decimal\n# only, no dunder names, no I/O. extract.py and the tests import it normally.\n\nimport json\nimport re\nfrom datetime import date, timedelta\nfrom decimal import Decimal, InvalidOperation, ROUND_HALF_UP\n\nCONFIDENCE_THRESHOLD = 0.85\nTOLERANCE = Decimal(\"0.05\")\nREQUIRED_CONFIDENCE = [\"vendor\", \"invoice_number\", \"invoice_date\", \"line_items\", \"total\"]\nCENT = Decimal(\"0.01\")\n\n\ndef parse_model_output(raw):\n    \"\"\"Pull the JSON object out of whatever the model sent back.\n\n    Returns (data, error). Handles code fences and prose around the object.\n    \"\"\"\n    if raw is None:\n        return None, \"empty model output\"\n    text = str(raw).strip()\n    if not text:\n        return None, \"empty model output\"\n    text = re.sub(r\"^```[a-zA-Z]*\\s*\", \"\", text)\n    text = re.sub(r\"\\s*```\\s*$\", \"\", text)\n    start = text.find(\"{\")\n    end = text.rfind(\"}\")\n    if start < 0 or end <= start:\n        return None, \"could not parse model output (no JSON object)\"\n    try:\n        data = json.loads(text[start:end + 1])\n    except ValueError:\n        return None, \"could not parse model output (invalid JSON)\"\n    if not isinstance(data, dict):\n        return None, \"could not parse model output (not an object)\"\n    return data, \"\"\n\n\ndef to_money(value):\n    \"\"\"Number, '1,234.50', '$99' -> Decimal rounded to cents. None if not a number.\"\"\"\n    if value is None or isinstance(value, bool):\n        return None\n    if isinstance(value, (int, float)):\n        text = repr(value)\n    else:\n        text = re.sub(r\"[,$\\s]\", \"\", str(value))\n        if text.startswith(\"(\") and text.endswith(\")\"):\n            text = \"-\" + text[1:-1]\n    if not text:\n        return None\n    try:\n        return Decimal(text).quantize(CENT, rounding=ROUND_HALF_UP)\n    except (InvalidOperation, ValueError):\n        return None\n\n\ndef to_number(value):\n    \"\"\"Quantities can be fractional (2.5 hours), so no rounding here.\"\"\"\n    if value is None or isinstance(value, bool):\n        return None\n    text = repr(value) if isinstance(value, (int, float)) else re.sub(r\"[,\\s]\", \"\", str(value))\n    try:\n        return Decimal(text)\n    except (InvalidOperation, ValueError):\n        return None\n\n\ndef parse_date(value):\n    \"\"\"ISO first, then US formats. Returns a date or None.\"\"\"\n    if not value:\n        return None\n    text = str(value).strip()\n    m = re.match(r\"^(\\d{4})-(\\d{1,2})-(\\d{1,2})$\", text)\n    if m:\n        y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))\n    else:\n        m = re.match(r\"^(\\d{1,2})[/.-](\\d{1,2})[/.-](\\d{2}|\\d{4})$\", text)\n        if not m:\n            return None\n        mo, d, y = int(m.group(1)), int(m.group(2)), int(m.group(3))\n        if y < 100:\n            y += 2000\n    try:\n        return date(y, mo, d)\n    except ValueError:\n        return None\n\n\ndef fmt(amount):\n    if amount is None:\n        return \"none\"\n    sign = \"-\" if amount < 0 else \"\"\n    return sign + \"$\" + \"{:,.2f}\".format(abs(amount))\n\n\ndef as_float(amount):\n    return None if amount is None else float(amount)\n\n\ndef clean_str(value):\n    if value is None:\n        return \"\"\n    return str(value).strip()\n\n\ndef check_extraction(raw, today=None, threshold=CONFIDENCE_THRESHOLD, tolerance=TOLERANCE, stop_reason=None):\n    \"\"\"Validate one extraction.\n\n    Returns a flat dict ready to store: status is \"ready\" or \"needs_review\",\n    review_reasons lists what stops auto-posting, warnings lists things worth\n    a look that do not.\n    \"\"\"\n    today = today or date.today()\n    reasons = []\n    warnings = []\n    if stop_reason == \"max_tokens\":\n        reasons.append(\"model output was cut off (max_tokens)\")\n    data, error = parse_model_output(raw)\n    if error:\n        return {\n            \"status\": \"needs_review\", \"review_reasons\": reasons + [error], \"warnings\": [],\n            \"document_type\": \"\", \"vendor_name\": \"\", \"invoice_number\": \"\", \"invoice_date\": \"\",\n            \"due_date\": \"\", \"po_number\": \"\", \"currency\": \"\", \"subtotal\": None, \"tax\": None,\n            \"total\": None, \"line_sum\": None, \"line_items\": [], \"handwritten\": False,\n            \"min_confidence\": None, \"notes\": \"\",\n        }\n\n    vendor = data.get(\"vendor\")\n    vendor_name = clean_str(vendor.get(\"name\") if isinstance(vendor, dict) else vendor)\n    invoice_number = clean_str(data.get(\"invoice_number\"))\n    doc_type = clean_str(data.get(\"document_type\")).lower() or \"invoice\"\n    currency = (clean_str(data.get(\"currency\")) or \"USD\").upper()\n    po_number = clean_str(data.get(\"po_number\"))\n    notes = clean_str(data.get(\"notes\"))\n    handwritten = data.get(\"handwritten\") is True\n\n    if doc_type != \"invoice\":\n        reasons.append(\"document looks like a \" + doc_type + \", not an invoice\")\n    if not vendor_name:\n        reasons.append(\"vendor name missing\")\n    if not invoice_number:\n        reasons.append(\"invoice number missing\")\n    if currency != \"USD\":\n        reasons.append(\"currency is \" + currency + \", books are in USD\")\n\n    invoice_date = parse_date(data.get(\"invoice_date\"))\n    if data.get(\"invoice_date\") and invoice_date is None:\n        reasons.append(\"invoice date not readable: \" + clean_str(data.get(\"invoice_date\")))\n    elif invoice_date is None:\n        reasons.append(\"invoice date missing\")\n    else:\n        if invoice_date > today + timedelta(days=30):\n            reasons.append(\"invoice date \" + invoice_date.isoformat() + \" is in the future\")\n        elif invoice_date < today - timedelta(days=730):\n            warnings.append(\"invoice date \" + invoice_date.isoformat() + \" is over two years old\")\n\n    due_date = parse_date(data.get(\"due_date\"))\n    if data.get(\"due_date\") and due_date is None:\n        warnings.append(\"due date not readable: \" + clean_str(data.get(\"due_date\")))\n    if due_date and invoice_date and due_date < invoice_date:\n        warnings.append(\"due date is before the invoice date\")\n\n    subtotal = to_money(data.get(\"subtotal\"))\n    tax = to_money(data.get(\"tax\"))\n    total = to_money(data.get(\"total\"))\n    if total is None:\n        reasons.append(\"total missing\")\n    elif total <= 0:\n        reasons.append(\"total is \" + fmt(total) + \", expected a positive amount\")\n\n    items = []\n    raw_items = data.get(\"line_items\")\n    if not isinstance(raw_items, list):\n        raw_items = []\n    for n, row in enumerate(raw_items, start=1):\n        if not isinstance(row, dict):\n            continue\n        qty = to_number(row.get(\"quantity\"))\n        price = to_money(row.get(\"unit_price\"))\n        amount = to_money(row.get(\"amount\"))\n        if amount is None and qty is not None and price is not None:\n            amount = (qty * price).quantize(CENT, rounding=ROUND_HALF_UP)\n            warnings.append(\"line \" + str(n) + \": amount missing, used quantity x price\")\n        if qty is not None and price is not None and amount is not None:\n            expected = (qty * price).quantize(CENT, rounding=ROUND_HALF_UP)\n            if abs(expected - amount) > tolerance:\n                reasons.append(\"line \" + str(n) + \": \" + \"{:f}\".format(qty.normalize()) + \" x \" + fmt(price)\n                               + \" = \" + fmt(expected) + \" but the amount says \" + fmt(amount))\n        if amount is None:\n            reasons.append(\"line \" + str(n) + \": no amount\")\n        items.append({\n            \"description\": clean_str(row.get(\"description\")),\n            \"quantity\": None if qty is None else float(qty),\n            \"unit_price\": as_float(price),\n            \"amount\": as_float(amount),\n        })\n\n    line_sum = None\n    if items and all(i[\"amount\"] is not None for i in items):\n        line_sum = sum((to_money(i[\"amount\"]) for i in items), Decimal(\"0.00\"))\n\n    if subtotal is not None and line_sum is not None and abs(subtotal - line_sum) > tolerance:\n        reasons.append(\"lines add to \" + fmt(line_sum) + \" but the subtotal says \" + fmt(subtotal)\n                       + \" (\" + fmt(abs(subtotal - line_sum)) + \" off)\")\n\n    base = subtotal if subtotal is not None else line_sum\n    if total is not None:\n        if base is None:\n            reasons.append(\"no line items or subtotal to check the total against\")\n        else:\n            expected_total = base + (tax or Decimal(\"0.00\"))\n            if abs(expected_total - total) > tolerance:\n                label = \"subtotal\" if subtotal is not None else \"lines\"\n                reasons.append(label + \" \" + fmt(base) + \" + tax \" + fmt(tax or Decimal(\"0.00\"))\n                               + \" = \" + fmt(expected_total) + \" but the total says \" + fmt(total)\n                               + \" (\" + fmt(abs(expected_total - total)) + \" off)\")\n\n    conf = data.get(\"confidence\")\n    if not isinstance(conf, dict):\n        conf = {}\n    scores = []\n    for field in REQUIRED_CONFIDENCE:\n        score = to_number(conf.get(field))\n        if score is None:\n            reasons.append(\"no confidence reported for \" + field)\n            continue\n        scores.append(score)\n        if score < Decimal(str(threshold)):\n            reasons.append(\"low confidence on \" + field + \" (\" + str(float(score)) + \")\")\n\n    if handwritten:\n        warnings.append(\"handwritten values\")\n\n    return {\n        \"status\": \"needs_review\" if reasons else \"ready\",\n        \"review_reasons\": reasons,\n        \"warnings\": warnings,\n        \"document_type\": doc_type,\n        \"vendor_name\": vendor_name,\n        \"invoice_number\": invoice_number,\n        \"invoice_date\": invoice_date.isoformat() if invoice_date else \"\",\n        \"due_date\": due_date.isoformat() if due_date else \"\",\n        \"po_number\": po_number,\n        \"currency\": currency,\n        \"subtotal\": as_float(subtotal),\n        \"tax\": as_float(tax),\n        \"total\": as_float(total),\n        \"line_sum\": as_float(line_sum),\n        \"line_items\": items,\n        \"handwritten\": handwritten,\n        \"min_confidence\": float(min(scores)) if scores else None,\n        \"notes\": notes,\n    }\n\n\n# ---- n8n node body (everything above is extract/validate.py verbatim) ----\nsrc = _item[\"json\"]\nresult = check_extraction(src.get(\"claude_text\"), stop_reason=src.get(\"stop_reason\"))\nout = dict(src)\nout.update(result)\nreturn {\"json\": out}\n"
+      }
+    },
+    {
+      "name": "Save document",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2016,
+        192
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_p2_documents_TABLE_ID",
+          "cachedResultName": "p2_documents"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "sha256": "={{ $json.sha256 }}",
+            "filename": "={{ $json.filename }}",
+            "mime_type": "={{ $json.mime_type }}",
+            "size_bytes": "={{ $json.size_bytes }}",
+            "gmail_message_id": "={{ $json.gmail_message_id }}",
+            "attachment_index": "={{ $json.attachment_index }}",
+            "sender": "={{ $json.sender }}",
+            "subject": "={{ $json.subject }}",
+            "received_at": "={{ $json.received_at }}",
+            "status": "={{ $json.status }}",
+            "review_reasons": "={{ ($json.review_reasons ?? []).join('; ') }}",
+            "warnings": "={{ ($json.warnings ?? []).join('; ') }}",
+            "vendor_name": "={{ $json.vendor_name }}",
+            "invoice_number": "={{ $json.invoice_number }}",
+            "invoice_date": "={{ $json.invoice_date }}",
+            "due_date": "={{ $json.due_date }}",
+            "po_number": "={{ $json.po_number }}",
+            "subtotal": "={{ $json.subtotal }}",
+            "tax": "={{ $json.tax }}",
+            "total": "={{ $json.total }}",
+            "line_items_json": "={{ JSON.stringify($json.line_items ?? []) }}",
+            "min_confidence": "={{ $json.min_confidence }}",
+            "notes": "={{ $json.notes }}",
+            "model": "={{ $json.model }}",
+            "raw_extraction": "={{ $json.claude_text }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      }
+    },
+    {
+      "name": "Ready to post?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2240,
+        192
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $('Validate extraction').item.json.status }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "rightValue": "ready"
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "name": "Ready: post Bill (next step)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2464,
+        96
+      ],
+      "parameters": {}
+    },
+    {
+      "name": "Needs review (next step)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2464,
+        288
+      ],
+      "parameters": {}
+    },
+    {
+      "name": "Claude failed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        400
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const { claude_request, ...meta } = $('Build Claude request').item.json;\nconst e = $json.error ?? {};\nconst msg = [e.message, e.description].filter(Boolean).join(' | ') || JSON.stringify($json).slice(0, 300);\nreturn { json: { ...meta, status: 'failed', error: msg.slice(0, 1000) } };"
+      }
+    },
+    {
+      "name": "Log failure",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1792,
+        400
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_p2_documents_TABLE_ID",
+          "cachedResultName": "p2_documents"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "sha256": "={{ 'failed:' + $json.sha256 }}",
+            "filename": "={{ $json.filename }}",
+            "mime_type": "={{ $json.mime_type }}",
+            "size_bytes": "={{ $json.size_bytes }}",
+            "gmail_message_id": "={{ $json.gmail_message_id }}",
+            "attachment_index": "={{ $json.attachment_index }}",
+            "sender": "={{ $json.sender }}",
+            "subject": "={{ $json.subject }}",
+            "received_at": "={{ $json.received_at }}",
+            "status": "failed",
+            "error": "={{ $json.error }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      }
+    },
+    {
+      "name": "Alert: extraction failed",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.7,
+      "position": [
+        2016,
+        400
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "authentication": "accessToken",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "#automation-alerts"
+        },
+        "messageType": "text",
+        "text": "=:rotating_light: *Invoice extraction failed after 3 tries*\nFile: {{ $('Claude failed').item.json.filename }}\nFrom: {{ $('Claude failed').item.json.sender }}\nError: {{ $('Claude failed').item.json.error }}\nThe file is not marked as seen, so sending it again will retry it.",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "mrkdwn": true
+        }
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "AP Intake inbox": {
+      "main": [
+        [
+          {
+            "node": "Split attachments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split attachments": {
+      "main": [
+        [
+          {
+            "node": "Has a document?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has a document?": {
+      "main": [
+        [
+          {
+            "node": "SHA-256 of file",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert: no invoice attached",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SHA-256 of file": {
+      "main": [
+        [
+          {
+            "node": "Already seen",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "New file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Already seen": {
+      "main": [
+        [
+          {
+            "node": "Log duplicate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "New file": {
+      "main": [
+        [
+          {
+            "node": "Build Claude request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Claude request": {
+      "main": [
+        [
+          {
+            "node": "Read invoice with Claude",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read invoice with Claude": {
+      "main": [
+        [
+          {
+            "node": "Collect result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Claude failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect result": {
+      "main": [
+        [
+          {
+            "node": "Validate extraction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate extraction": {
+      "main": [
+        [
+          {
+            "node": "Save document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save document": {
+      "main": [
+        [
+          {
+            "node": "Ready to post?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ready to post?": {
+      "main": [
+        [
+          {
+            "node": "Ready: post Bill (next step)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Needs review (next step)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude failed": {
+      "main": [
+        [
+          {
+            "node": "Log failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log failure": {
+      "main": [
+        [
+          {
+            "node": "Alert: extraction failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Chicago",
+    "errorWorkflow": "REPLACE_WITH_ERROR_HANDLER_ID"
+  }
+}
