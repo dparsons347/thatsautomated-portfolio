@@ -42,7 +42,7 @@ Slack buttons ──> P6 Slack actions (verify signature) ──> Gmail reply on
 |---|---|
 | `support-intake.json` | Gmail trigger on the Support Triage label. Strips quoted text, skips mail from ourselves, stores each message once (keyed on Gmail message ID), calls the triage sub-workflow |
 | `triage-message.json` | Loads the message and its thread from the data table, calls the service, posts the card. On error: queue, alert once, give up after 7 attempts. Threshold lives in its Settings node |
-| `slack-actions.json` | Slack interactivity endpoint. Acks within 3 seconds, verifies the signature, then Approve (sends the draft as a reply on the same Gmail thread with Reply-To the support address), Edit (modal, then send), Reassign (thread mention and Routed label), Archive (label, out of the inbox). Updates the card either way |
+| `slack-actions.json` | Slack interactivity endpoint. Acks within 3 seconds, verifies the signature, then Approve (sends the draft as a reply on the same Gmail thread with Reply-To the support address), Edit (modal, then send), Reassign (checks the pick is a person, not a bot or app, then a thread mention and the Routed label), Archive (label, out of the inbox). Updates the card either way |
 | `retry-queued.json` | Every 10 minutes (or on demand) re-runs queued messages |
 | `seed-test-emails.json` | Drops the canned emails into Gmail under the label, from plus addresses I control. The angry reply is threaded onto Maya's original by its headers |
 | `reset-demo-data.json` | Clears the table, trashes the test threads, deletes the bot's cards |
@@ -116,6 +116,7 @@ docker exec root-n8n-1 wget -qO- http://triage-api:8000/health
 | A reply lands on a thread that was classified sales | Classified again with the thread history. Negative tone or a category change sends it to a person |
 | The model is confident and wrong | The card shows its reason and the trace. Raise the threshold in the Settings node of P6 Triage message |
 | Someone posts a fake Slack button click | Signature check fails, nothing runs |
+| Someone reassigns to a bot or app | Ephemeral "pick a person", nothing changes (users.info check; Slack's user picker can't hide bots) |
 | Two people click Approve | The second gets "Already handled", one email goes out |
 | The same email is polled twice | Stored once, keyed on the Gmail message ID |
 

@@ -641,8 +641,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.5,
       "position": [
-        2220,
-        500
+        2660,
+        480
       ],
       "parameters": {
         "method": "POST",
@@ -666,8 +666,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.5,
       "position": [
-        2440,
-        500
+        2880,
+        480
       ],
       "parameters": {
         "method": "POST",
@@ -691,8 +691,8 @@
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
       "position": [
-        2660,
-        500
+        3100,
+        480
       ],
       "parameters": {
         "resource": "row",
@@ -875,6 +875,89 @@
           "name": "Slack account"
         }
       }
+    },
+    {
+      "id": "9d473d3a-9016-445b-85ad-81c64c357fbc",
+      "name": "Look up picked user",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2220,
+        560
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://slack.com/api/users.info?user={{ $('Decide').first().json.selected_user }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "id": "e3e1f0a9-7ade-4a58-8848-f7a44a2300ac",
+      "name": "A real person?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2440,
+        560
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.ok === true && !$json.user.is_bot && !$json.user.is_app_user && !$json.user.deleted && $json.user.id !== 'USLACKBOT' }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "af306b14-b85f-460f-b82f-1cb69ea7c3fd",
+      "name": "Ask for a person",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2660,
+        700
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postEphemeral",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $('Decide').first().json.channel, user: $('Decide').first().json.user, text: $('Look up picked user').first().json.ok ? 'That is a bot or app, not a person. Pick a teammate to reassign to. Nothing was changed.' : 'Could not check that user (Slack said: ' + $('Look up picked user').first().json.error + '). Nothing was changed.' }) }}"
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack account"
+        }
+      }
     }
   ],
   "connections": {
@@ -995,7 +1078,7 @@
         ],
         [
           {
-            "node": "Tell the assignee",
+            "node": "Look up picked user",
             "type": "main",
             "index": 0
           }
@@ -1142,6 +1225,35 @@
         [
           {
             "node": "Resolved card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Look up picked user": {
+      "main": [
+        [
+          {
+            "node": "A real person?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A real person?": {
+      "main": [
+        [
+          {
+            "node": "Tell the assignee",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ask for a person",
             "type": "main",
             "index": 0
           }
