@@ -33,7 +33,13 @@
         "httpMethod": "POST",
         "path": "p2-queue-review",
         "responseMode": "onReceived",
-        "options": {}
+        "options": {},
+        "authentication": "headerAuth"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "P2 webhook key"
+        }
       }
     },
     {

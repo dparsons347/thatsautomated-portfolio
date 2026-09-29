@@ -71,9 +71,15 @@
         "httpMethod": "POST",
         "path": "p2-post-bill",
         "responseMode": "onReceived",
-        "options": {}
+        "options": {},
+        "authentication": "headerAuth"
       },
-      "webhookId": "5340cc52-6b72-4a06-a2f6-3eece725db4a"
+      "webhookId": "5340cc52-6b72-4a06-a2f6-3eece725db4a",
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "P2 webhook key"
+        }
+      }
     },
     {
       "id": "81454982-d30c-4a9c-a065-e2d74a1d4303",
@@ -910,7 +916,7 @@
           "value": "#automation-alerts"
         },
         "messageType": "text",
-        "text": "=:rotating_light: *QuickBooks rejected the Bill*\n{{ $(\"Plan the Bill\").item.json.vendor_display_name }} invoice {{ $(\"Plan the Bill\").item.json.bill.DocNumber }}, file {{ $(\"Get document\").first().json.filename }}\nError: {{ $(\"Create failed\").item.json.error }}\nRow {{ $(\"Create failed\").item.json.document_id }} in p2_documents is marked post_failed. Fix the cause and POST the row id to /webhook/p2-post-bill to retry.",
+        "text": "=:rotating_light: *QuickBooks rejected the Bill*\n{{ $(\"Plan the Bill\").item.json.vendor_display_name }} invoice {{ $(\"Plan the Bill\").item.json.bill.DocNumber }}, file {{ $(\"Get document\").first().json.filename }}\nError: {{ $(\"Create failed\").item.json.error }}\nRow {{ $(\"Create failed\").item.json.document_id }} in p2_documents is marked post_failed. Fix the cause and POST the row id to /webhook/p2-post-bill (with the X-Webhook-Key header) to retry.",
         "otherOptions": {
           "includeLinkToWorkflow": false,
           "mrkdwn": true

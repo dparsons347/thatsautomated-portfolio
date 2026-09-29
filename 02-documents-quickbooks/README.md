@@ -33,7 +33,7 @@ Anything sent to `daniel+ap@thatsautomated.com` gets the Gmail label **AP Intake
 
    Handwriting, an old date or a due date before the invoice date are recorded as warnings and do not block posting.
 5. **Save** to `p2_documents` with the status, reasons, warnings, the extracted fields, the line items and Claude's raw output, then branch: `ready` goes on to posting and `needs_review` goes to review.
-6. **Post to QuickBooks** (separate workflow, `n8n/post-bill.json`, called with the row id). It can also be called by webhook, which is how an approved review row or a retry gets posted.
+6. **Post to QuickBooks** (separate workflow, `n8n/post-bill.json`, called with the row id). It can also be called by webhook, which is how an approved review row or a retry gets posted. The webhook (and the review sheet's `p2-queue-review`) needs an `X-Webhook-Key` header; without it n8n answers 403. The DocuSign webhook takes no key because it only reads the envelope ID and fetches everything else back from DocuSign.
    - Load the row and stop unless it is `ready` (or `approved`) and has no Bill ID yet, so calling it twice is harmless.
    - Pull the active vendors and expense accounts from QuickBooks.
    - `qbo/bill.py` (run as-is in a Python Code node) matches the vendor name after normalizing it ("Norton Lumber & Building Materials, Inc." finds "Norton Lumber and Building Materials"; a bare "Ellis" does not find "Ellis Equipment Rental"), picks the expense account for that vendor, and builds the Bill: one line per invoice line plus a sales tax line, which must add up to the invoice total to the cent. Anything it can't do safely sends the row to `needs_review` with the reason.
