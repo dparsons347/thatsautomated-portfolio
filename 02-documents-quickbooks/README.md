@@ -1,8 +1,8 @@
 # 02 - Documents to QuickBooks Online
 
-Vendor bills arrive by email as PDFs or phone photos. Claude reads each one, a Python check decides whether the numbers can be trusted, and only clean bills go on to QuickBooks. Anything odd waits for a person with the reason spelled out. Built on n8n, Claude (Sonnet), Python and the QuickBooks Online sandbox.
+Two legs. **Bills in:** vendor bills arrive by email as PDFs or phone photos. Claude reads each one, a Python check decides whether the numbers can be trusted, and only clean bills go on to QuickBooks. Anything odd lands on a review sheet with the reason spelled out, and ticking Approve sends it on. **Agreements out:** a form produces a purchase agreement, DocuSign collects the signature, and the signed PDF, the CRM deal and Slack all update on their own. Built on n8n, Claude (Sonnet), Python, the QuickBooks Online sandbox, Google Sheets and Drive, DocuSign (developer sandbox) and HubSpot.
 
-Status: intake, extraction and posting to QuickBooks are built and tested (Sep 29, 2026). The review sheet and the document generation leg (form to PDF to DocuSign) are next.
+Status: both legs built and tested (Sep 29, 2026). Loom next.
 
 ## What this proves
 
@@ -13,6 +13,8 @@ Status: intake, extraction and posting to QuickBooks are built and tested (Sep 2
 - A bill from a vendor that isn't in QuickBooks goes to review instead of being guessed onto the closest name.
 - The Bill in QuickBooks matches the paper to the cent, carries the invoice number, dates and PO, and has the original file attached.
 - Every document ends in a known state (`needs_review`, `duplicate`, `failed`, `posted`, `already_in_qbo` or `post_failed`) with the reason stored next to it.
+- A person fixes a bad read in a spreadsheet, not in QuickBooks: correct the yellow cells, tick Approve, and the Bill posts with the corrected numbers. If the fix still doesn't add up, the sheet says why.
+- A signed contract closes the loop without anyone touching it: signed PDF filed in Drive, HubSpot deal moved to Won, the team told in Slack. A declined one moves the deal to Lost.
 
 ## How it works
 
@@ -39,6 +41,8 @@ Anything sent to `daniel+ap@thatsautomated.com` gets the Gmail label **AP Intake
    - Create the Bill, mark the row `posted` with the Bill ID right away, then pull the original attachment back out of Gmail and attach it to the Bill. If the attachment fails, the Bill stays and Slack says to attach the file by hand.
    - If QuickBooks rejects the Bill, the row is marked `post_failed` with QuickBooks' error and Slack says how to retry.
 
+7. **Review sheet** (`n8n/send-to-review.json` and `n8n/review-approvals.json`). Every `needs_review` row, from intake or from posting, is written to a Google Sheet (upsert on the row ID) with the reasons, Claude's notes and a link to the email, and `#automation-alerts` gets a note with the sheet link. The reviewer edits the yellow cells (vendor, invoice number, dates, total, tax) and ticks **approve**. Once a minute a second workflow picks up one approved row, checks what was typed (a total that isn't a number or a date that can't be read goes back to the sheet as "Not approved yet: ..."), saves the corrections, marks the row `approved` and hands it to the posting workflow. The result is written back next to the checkbox: "Posted as QuickBooks Bill 149", "Still needs review: ...", and so on, and the checkbox is cleared.
+
    Token refresh is handled by n8n's QuickBooks credential. `qbo/client.py` is the code version of this leg for use outside n8n, and it owns the OAuth refresh itself (refresh and retry once on a 401, keep the rotated refresh token).
 
 If Claude fails three times, the file is logged as `failed` (its hash is stored as `failed:<sha256>` so it does not count as seen), `#automation-alerts` gets the error, and sending the file again will retry it. Any other node failure goes to the shared Error Handler workflow.
@@ -57,6 +61,21 @@ The five documents in `test-data/`, sent to the AP inbox one email each:
 
 Plus an email with no attachment (Slack note in `#automation-alerts`) and a real API failure during the build (a request parameter the model rejected), which went down the failure path: three tries, a `failed` row with the error, and a Slack alert.
 
+## Agreements out (generation leg)
+
+1. **Form** (n8n form, `n8n/agreement-out.json`): customer, signer, job site, scope, price, deposit percent, dates.
+2. **Build the agreement** (`generate/build-agreement.js`, run as-is in a Code node). Checks the input (email format, price above zero, deposit 0 to 100 percent, completion not before start) and writes the agreement as HTML. DocuSign converts HTML to PDF when the envelope is created, so there is no PDF service to host. Sign-here and date tabs are placed on anchor text (`\s1\`, `\d1\`) printed in white.
+3. **HubSpot deal** created in the Contacted stage.
+4. **DocuSign envelope** sent, with the agreement number and HubSpot deal ID as hidden envelope fields and a per-envelope Connect webhook for completed, declined and voided.
+5. Logged to the `p2_agreements` data table and posted to `#leads`.
+
+When DocuSign calls back (`n8n/agreement-events.json`):
+
+- Only the envelope ID is taken from the webhook. Status, custom fields and signer are read back from DocuSign with our own credential, so a forged POST can't mark a deal won.
+- An envelope already handled is ignored, so DocuSign's retries are harmless.
+- **Completed:** download the combined signed PDF, upload it to the Drive folder, move the HubSpot deal to Won with the close date and a link to the signed copy, log it, post to `#leads`.
+- **Declined:** deal to Lost with the signer's reason. **Voided:** logged and posted.
+
 ## Posting test run (Sep 29, 2026)
 
 Against the QuickBooks Online sandbox:
@@ -73,6 +92,15 @@ Against the QuickBooks Online sandbox:
 
 Bills 145 and 146 were posted while the attachment step was still being fixed, so they have no file on them.
 
+## Review and agreement test run (Sep 29, 2026)
+
+| Case | Result |
+|---|---|
+| Tim Philip handwritten invoice ($40 total gap) on the review sheet, total corrected to $1,252.50, approve ticked | Posted within a minute as Bill 149 to Decks and Patios, the handwritten photo attached, sheet says "Posted as QuickBooks Bill 149" |
+| Bay Area Concrete Pumping approved without fixing the vendor | Sheet says "Still needs review: vendor "Bay Area Concrete Pumping" is not in QuickBooks", checkbox cleared |
+| Purchase agreement form, Sunset Terrace HOA, $18,500 with 30% deposit | HubSpot deal in Contacted, DocuSign envelope sent to the test signer, row in `p2_agreements`, note in `#leads` |
+| Second agreement voided through the DocuSign API | Connect called back about 20 seconds later, row marked `voided` with the reason, note in `#leads` |
+
 ## Files
 
 ```
@@ -88,10 +116,21 @@ qbo/
   client.py           same posting leg as a CLI with its own OAuth refresh: python3 client.py row.json invoice.pdf
   test_bill.py        vendor matching, account choice, Bill math, review reasons
   test_client.py      refresh and retry once on 401, no double post, attachment upload
-  test_n8n_sync.py    fails if the posting export and bill.py drift apart
+  test_n8n_sync.py    fails if the exports and the code in this repo drift apart
+review/
+  read-corrections.js       the approvals workflow's Code node: reads what the reviewer typed
+  test_read_corrections.py
+generate/
+  build-agreement.js        the agreement form's Code node: checks input, writes the HTML, builds the envelope
+  run_code_node.js          runs an n8n Code node file under plain node for the tests
+  test_build_agreement.py
 n8n/
   document-intake.json
   post-bill.json
+  send-to-review.json
+  review-approvals.json
+  agreement-out.json
+  agreement-events.json
 test-data/            the five sample bills, expected results, generator script
 ```
 
@@ -99,7 +138,9 @@ test-data/            the five sample bills, expected results, generator script
 cd extract
 python3 -m unittest -v          # 50 tests, no network
 cd ../qbo
-python3 -m unittest -v          # 41 tests, no network
+python3 -m unittest -v          # 46 tests, no network
+cd ../review && python3 -m unittest -v     # needs node
+cd ../generate && python3 -m unittest -v   # needs node
 ANTHROPIC_API_KEY=... python3 extract.py ../test-data/04-tim-philip-masonry-117-handwritten.jpg
 ```
 
@@ -111,6 +152,9 @@ Credential IDs are stripped from `n8n/document-intake.json`. After importing:
 2. Create a data table named `p2_documents` with the columns listed below and put its ID in the four data table nodes.
 3. Put your Gmail label ID in the trigger and your error workflow ID in the workflow settings.
 4. Import `n8n/post-bill.json` too. Attach your QuickBooks Online, Gmail and Slack credentials, put your QuickBooks company ID (realm ID) in the `QuickBooks config` node (both fields), and put the data table ID in its five data table nodes. Then put the posting workflow's ID in the intake's `Post Bill to QuickBooks` node.
+
+5. Review sheet: make a Google Sheet with a `Review queue` tab and the header row `row_id, received, vendor, invoice_number, invoice_date, due_date, total, tax, why_review, warnings, claude_notes, email_link, approve, result, updated`. Put its ID in `send-to-review.json` and `review-approvals.json`, set the tab's gid in the "Checkbox and highlight" node (0 for the first tab) and your AP mailbox in the email link. Do not pre-fill checkboxes down the sheet (see the notes below).
+6. Agreements: create a `p2_agreements` data table (`agreement_number, company, signer_name, signer_email, price (number), deposit (number), envelope_id, hubspot_deal_id, status, sent_at, signed_at, drive_file_id, drive_link, error`), a Drive folder for signed copies, and a DocuSign OAuth2 credential (generic OAuth2, `account-d.docusign.com`, scope `signature`). Fill in the DocuSign account ID, your n8n host, the folder ID and your HubSpot Contacted, Won and Lost stage IDs.
 
 Posting uses HTTP Request nodes on the QuickBooks credential rather than the QuickBooks node, because the node can't set the invoice number (DocNumber), takes a fixed number of lines, and can't attach files.
 
@@ -125,9 +169,14 @@ Posting uses HTTP Request nodes on the QuickBooks credential rather than the Qui
 - Re-publishing the workflow can make the Gmail trigger re-deliver recent emails. The hash check turns those into `duplicate` rows instead of double work.
 - Attaching a file in n8n with the QuickBooks OAuth2 credential: a raw binary body fails with `source.on is not a function`, and a multipart text field for the metadata goes out as `text/plain`, which QuickBooks rejects ("Unable to find a MessageBodyReader for media type text/plain"). What works is multipart with both parts as binary, the metadata written to a small `application/json` file first.
 - QuickBooks can answer the upload with HTTP 200 and a Fault in the body, so the workflow checks for an Attachable ID instead of trusting the status code.
+- Google Sheets checkboxes count as data. With checkbox validation pre-filled down 500 rows, the Sheets node's "append or update" put the first real row at row 501. The feeder now adds the checkbox and highlight only to rows that exist, after each upsert.
+- The Sheets trigger node needs its own OAuth credential type. The approvals workflow polls the sheet every minute with the regular Sheets credential instead and handles one approved row per run, which also keeps a flood of approvals from racing each other.
+- The Google Sheets credential's `drive.file` scope is enough to create the Drive folder and upload the signed PDFs, and a raw binary upload works on it (unlike the QuickBooks case above).
+- DocuSign accepts an HTML document and converts it to PDF. Anchor tabs work on the converted text.
+- Per-envelope Connect (`eventNotification`) works on the DocuSign developer account with no account-level Connect setup.
 - The webhook trigger on the posting workflow has no auth. It only posts rows that are already `ready` and not yet posted, but add header auth before pointing it at real books.
 
 ## What's next
 
-- Review sheet: `needs_review` rows go to a Google Sheet with the reasons and a link to the email; ticking Approve sends the row on to posting.
-- Generation leg: form to PDF to DocuSign, with the signed copy archived.
+- Loom.
+- Header auth on the three webhooks (posting, queue, DocuSign events) before this touches real books. DocuSign Connect can also sign its calls with HMAC once it is set up at the account level.

@@ -1,0 +1,540 @@
+{
+  "name": "P2: Review approvals",
+  "nodes": [
+    {
+      "name": "Every minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Read review sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        224,
+        200
+      ],
+      "parameters": {
+        "resource": "sheet",
+        "operation": "read",
+        "authentication": "oAuth2",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_REVIEW_SHEET_ID",
+          "cachedResultName": "P2 AP review queue"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Review queue"
+        },
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "name": "Approved rows",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        448,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.approve === true || String($json.approve).toUpperCase() === \"TRUE\" }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "name": "One per run",
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        672,
+        200
+      ],
+      "parameters": {
+        "maxItems": 1
+      }
+    },
+    {
+      "name": "Read the corrections",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// The reviewer can fix the yellow cells (vendor, invoice number, dates,\n// total, tax) before ticking approve. Normalize what they typed and refuse\n// anything that can't be read, so a typo comes back to them on the sheet\n// instead of going to QuickBooks. One row per run.\nconst r = $input.first().json;\n\nconst money = (v) => {\n  if (v === '' || v === null || v === undefined) return null;\n  const n = Number(String(v).replace(/[$,\\s]/g, ''));\n  return Number.isFinite(n) ? Math.round(n * 100) / 100 : NaN;\n};\n\nconst isoDate = (v) => {\n  if (v === '' || v === null || v === undefined) return '';\n  if (typeof v === 'number') {\n    // Sheets date serial (days since 1899-12-30)\n    return new Date(Date.UTC(1899, 11, 30) + v * 86400000).toISOString().slice(0, 10);\n  }\n  const s = String(v).trim();\n  let m = s.match(/^(\\d{4})-(\\d{1,2})-(\\d{1,2})$/);\n  if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;\n  m = s.match(/^(\\d{1,2})\\/(\\d{1,2})\\/(\\d{2}|\\d{4})$/);\n  if (m) {\n    const y = m[3].length === 2 ? '20' + m[3] : m[3];\n    return `${y}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`;\n  }\n  return 'BAD:' + s;\n};\n\nconst problems = [];\nconst vendor = String(r.vendor ?? '').trim();\nconst invoiceNumber = String(r.invoice_number ?? '').trim();\nconst total = money(r.total);\nconst tax = money(r.tax);\nconst invoiceDate = isoDate(r.invoice_date);\nconst dueDate = isoDate(r.due_date);\n\nif (!vendor) problems.push('vendor is empty');\nif (!invoiceNumber) problems.push('invoice_number is empty');\nif (total === null || Number.isNaN(total) || total <= 0) problems.push('total must be a positive number');\nif (Number.isNaN(tax)) problems.push('tax must be a number or blank');\nif (!invoiceDate || invoiceDate.startsWith('BAD:')) problems.push('invoice_date should look like 2026-09-22');\nif (dueDate.startsWith('BAD:')) problems.push('due_date should look like 2026-10-22 or be blank');\n\nreturn [{\n  json: {\n    document_id: Number(r.row_id),\n    row_id: r.row_id,\n    problems,\n    fields: {\n      vendor_name: vendor,\n      invoice_number: invoiceNumber,\n      invoice_date: invoiceDate,\n      due_date: dueDate,\n      total,\n      tax,\n    },\n  },\n}];\n"
+      }
+    },
+    {
+      "name": "Corrections make sense?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1120,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.problems.length === 0 }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "name": "Save corrections, mark approved",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1344,
+        100
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_p2_documents_TABLE_ID",
+          "cachedResultName": "p2_documents"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.document_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "approved",
+            "vendor_name": "={{ $json.fields.vendor_name }}",
+            "invoice_number": "={{ $json.fields.invoice_number }}",
+            "invoice_date": "={{ $json.fields.invoice_date }}",
+            "due_date": "={{ $json.fields.due_date }}",
+            "total": "={{ $json.fields.total }}",
+            "tax": "={{ $json.fields.tax }}",
+            "review_reasons": "=approved on the review sheet {{ $now.setZone(\"America/Chicago\").toFormat(\"yyyy-MM-dd HH:mm\") }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      }
+    },
+    {
+      "name": "Post Bill to QuickBooks",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1568,
+        100
+      ],
+      "parameters": {
+        "mode": "each",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_POST_BILL_WORKFLOW_ID",
+          "cachedResultName": "P2: Post bill to QuickBooks"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "document_id": "={{ $(\"Read the corrections\").first().json.document_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "document_id",
+              "displayName": "document_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "number"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Read result",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1792,
+        100
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_p2_documents_TABLE_ID",
+          "cachedResultName": "p2_documents"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Read the corrections\").first().json.document_id }}"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      },
+      "executeOnce": true
+    },
+    {
+      "name": "Write result to sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2016,
+        100
+      ],
+      "parameters": {
+        "resource": "sheet",
+        "operation": "update",
+        "authentication": "oAuth2",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_REVIEW_SHEET_ID",
+          "cachedResultName": "P2 AP review queue"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Review queue"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "row_id"
+          ],
+          "value": {
+            "row_id": "={{ $(\"Read the corrections\").first().json.row_id }}",
+            "approve": false,
+            "result": "={{ $json.status === \"posted\" ? \"Posted as QuickBooks Bill \" + $json.qbo_bill_id : $json.status === \"already_in_qbo\" ? \"Not posted: already in QuickBooks as Bill \" + $json.qbo_bill_id : $json.status === \"needs_review\" ? \"Still needs review: \" + $json.review_reasons : $json.status === \"post_failed\" ? \"QuickBooks rejected it: \" + $json.error : \"Approved, but posting did not finish (status \" + $json.status + \"). See #automation-alerts.\" }}",
+            "updated": "={{ $now.setZone(\"America/Chicago\").toFormat(\"yyyy-MM-dd HH:mm\") }}"
+          },
+          "schema": [
+            {
+              "id": "row_id",
+              "displayName": "row_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "approve",
+              "displayName": "approve",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "result",
+              "displayName": "result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "updated",
+              "displayName": "updated",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "name": "Tell reviewer what to fix",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1344,
+        300
+      ],
+      "parameters": {
+        "resource": "sheet",
+        "operation": "update",
+        "authentication": "oAuth2",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_REVIEW_SHEET_ID",
+          "cachedResultName": "P2 AP review queue"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Review queue"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "row_id"
+          ],
+          "value": {
+            "row_id": "={{ $json.row_id }}",
+            "approve": false,
+            "result": "=Not approved yet: {{ $json.problems.join(\"; \") }}",
+            "updated": "={{ $now.setZone(\"America/Chicago\").toFormat(\"yyyy-MM-dd HH:mm\") }}"
+          },
+          "schema": [
+            {
+              "id": "row_id",
+              "displayName": "row_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "approve",
+              "displayName": "approve",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "result",
+              "displayName": "result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "updated",
+              "displayName": "updated",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every minute": {
+      "main": [
+        [
+          {
+            "node": "Read review sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read review sheet": {
+      "main": [
+        [
+          {
+            "node": "Approved rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approved rows": {
+      "main": [
+        [
+          {
+            "node": "One per run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "One per run": {
+      "main": [
+        [
+          {
+            "node": "Read the corrections",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the corrections": {
+      "main": [
+        [
+          {
+            "node": "Corrections make sense?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Corrections make sense?": {
+      "main": [
+        [
+          {
+            "node": "Save corrections, mark approved",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Tell reviewer what to fix",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save corrections, mark approved": {
+      "main": [
+        [
+          {
+            "node": "Post Bill to QuickBooks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post Bill to QuickBooks": {
+      "main": [
+        [
+          {
+            "node": "Read result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read result": {
+      "main": [
+        [
+          {
+            "node": "Write result to sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Chicago",
+    "errorWorkflow": "REPLACE_WITH_ERROR_HANDLER_ID"
+  }
+}

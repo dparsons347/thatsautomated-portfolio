@@ -1,0 +1,414 @@
+{
+  "name": "P2: Send to review sheet",
+  "nodes": [
+    {
+      "name": "Called with a document",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "document_id",
+              "type": "number"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Queue by webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "p2-queue-review",
+        "responseMode": "onReceived",
+        "options": {}
+      }
+    },
+    {
+      "name": "Get document",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_p2_documents_TABLE_ID",
+          "cachedResultName": "p2_documents"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.document_id ?? $json.body?.document_id }}"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      }
+    },
+    {
+      "name": "Put row on review sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        448,
+        0
+      ],
+      "parameters": {
+        "resource": "sheet",
+        "operation": "appendOrUpdate",
+        "authentication": "oAuth2",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_REVIEW_SHEET_ID",
+          "cachedResultName": "P2 AP review queue"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Review queue"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "row_id"
+          ],
+          "value": {
+            "row_id": "={{ $json.id }}",
+            "received": "={{ $json.received_at ? DateTime.fromISO($json.received_at).setZone(\"America/Chicago\").toFormat(\"yyyy-MM-dd HH:mm\") : \"\" }}",
+            "vendor": "={{ $json.vendor_name ?? \"\" }}",
+            "invoice_number": "={{ $json.invoice_number ?? \"\" }}",
+            "invoice_date": "={{ $json.invoice_date ?? \"\" }}",
+            "due_date": "={{ $json.due_date ?? \"\" }}",
+            "total": "={{ $json.total ?? \"\" }}",
+            "tax": "={{ $json.tax ?? \"\" }}",
+            "why_review": "={{ $json.review_reasons ?? \"\" }}",
+            "warnings": "={{ $json.warnings ?? \"\" }}",
+            "claude_notes": "={{ $json.notes ?? \"\" }}",
+            "email_link": "={{ $json.gmail_message_id ? \"https://mail.google.com/mail/u/REPLACE_WITH_AP_MAILBOX/#all/\" + $json.gmail_message_id : \"\" }}",
+            "approve": false,
+            "result": "Waiting for review. Fix the yellow cells if needed, then tick approve.",
+            "updated": "={{ $now.setZone(\"America/Chicago\").toFormat(\"yyyy-MM-dd HH:mm\") }}"
+          },
+          "schema": [
+            {
+              "id": "row_id",
+              "displayName": "row_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "received",
+              "displayName": "received",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "vendor",
+              "displayName": "vendor",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "invoice_number",
+              "displayName": "invoice_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "invoice_date",
+              "displayName": "invoice_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "due_date",
+              "displayName": "due_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "total",
+              "displayName": "total",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "tax",
+              "displayName": "tax",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "why_review",
+              "displayName": "why_review",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "warnings",
+              "displayName": "warnings",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "claude_notes",
+              "displayName": "claude_notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email_link",
+              "displayName": "email_link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "approve",
+              "displayName": "approve",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "result",
+              "displayName": "result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "updated",
+              "displayName": "updated",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "name": "Count sheet rows",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://sheets.googleapis.com/v4/spreadsheets/REPLACE_WITH_REVIEW_SHEET_ID/values/Review%20queue!A:A",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "name": "Checkbox and highlight",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        896,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://sheets.googleapis.com/v4/spreadsheets/REPLACE_WITH_REVIEW_SHEET_ID:batchUpdate",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ requests: [ { setDataValidation: { range: { sheetId: 0, startRowIndex: 1, endRowIndex: Math.max(2, ($json.values ?? []).length), startColumnIndex: 12, endColumnIndex: 13 }, rule: { condition: { type: 'BOOLEAN' }, strict: true } } }, { repeatCell: { range: { sheetId: 0, startRowIndex: 1, endRowIndex: Math.max(2, ($json.values ?? []).length), startColumnIndex: 2, endColumnIndex: 8 }, cell: { userEnteredFormat: { backgroundColor: { red: 1, green: 0.98, blue: 0.88 } } }, fields: 'userEnteredFormat(backgroundColor)' } }, { repeatCell: { range: { sheetId: 0, startRowIndex: 1, endRowIndex: Math.max(2, ($json.values ?? []).length), startColumnIndex: 8, endColumnIndex: 11 }, cell: { userEnteredFormat: { wrapStrategy: 'WRAP', verticalAlignment: 'TOP' } }, fields: 'userEnteredFormat(wrapStrategy,verticalAlignment)' } } ] }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "name": "Alert: bill needs review",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.7,
+      "position": [
+        1120,
+        0
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "authentication": "accessToken",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "#automation-alerts"
+        },
+        "messageType": "text",
+        "text": "=:mag: *Bill needs a person*\n{{ $(\"Get document\").item.json.vendor_name || \"Unknown vendor\" }} invoice {{ $(\"Get document\").item.json.invoice_number || \"?\" }}, total {{ $(\"Get document\").item.json.total != null ? \"$\" + Number($(\"Get document\").item.json.total).toFixed(2) : \"?\" }}\nWhy: {{ $(\"Get document\").item.json.review_reasons }}\nReview sheet: https://docs.google.com/spreadsheets/d/REPLACE_WITH_REVIEW_SHEET_ID/edit",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "mrkdwn": true
+        }
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Called with a document": {
+      "main": [
+        [
+          {
+            "node": "Get document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Queue by webhook": {
+      "main": [
+        [
+          {
+            "node": "Get document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get document": {
+      "main": [
+        [
+          {
+            "node": "Put row on review sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Put row on review sheet": {
+      "main": [
+        [
+          {
+            "node": "Count sheet rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count sheet rows": {
+      "main": [
+        [
+          {
+            "node": "Checkbox and highlight",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Checkbox and highlight": {
+      "main": [
+        [
+          {
+            "node": "Alert: bill needs review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Chicago",
+    "errorWorkflow": "REPLACE_WITH_ERROR_HANDLER_ID"
+  }
+}

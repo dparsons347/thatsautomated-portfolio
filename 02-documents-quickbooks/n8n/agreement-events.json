@@ -1,0 +1,765 @@
+{
+  "name": "P2: DocuSign agreement events",
+  "nodes": [
+    {
+      "name": "DocuSign Connect event",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "p2-docusign-events",
+        "responseMode": "onReceived",
+        "options": {}
+      }
+    },
+    {
+      "name": "Read event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Only the envelope ID is taken from the webhook. Everything else is read back\n// from DocuSign with our own credentials, so a forged POST can't mark a deal won.\nconst b = $input.first().json.body ?? {};\nconst envelopeId = String(b.data?.envelopeId ?? b.envelopeId ?? '').trim();\nreturn [{ json: { event: b.event ?? '', envelope_id: envelopeId } }];"
+      }
+    },
+    {
+      "name": "Has an envelope ID",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        448,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ /^[0-9a-f-]{36}$/i.test($json.envelope_id) }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "name": "DocuSign: get envelope",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        672,
+        200
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://demo.docusign.net/restapi/v2.1/accounts/REPLACE_WITH_DOCUSIGN_ACCOUNT_ID/envelopes/{{ $json.envelope_id }}?include=custom_fields,recipients",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "options": {}
+      },
+      "credentials": {
+        "oAuth2Api": {
+          "name": "Docusign OAuth API"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "name": "Envelope facts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const e = $input.first().json;\nconst fields = e.customFields?.textCustomFields ?? [];\nconst field = (name) => (fields.find((f) => f.name === name) ?? {}).value ?? '';\nconst signer = (e.recipients?.signers ?? [])[0] ?? {};\nreturn [{ json: {\n  envelope_id: e.envelopeId,\n  status: e.status,\n  agreement_number: field('agreement_number'),\n  hubspot_deal_id: field('hubspot_deal_id'),\n  completed_at: e.completedDateTime ?? '',\n  declined_reason: signer.declinedReason ?? '',\n  voided_reason: e.voidedReason ?? '',\n  signer_name: signer.name ?? '',\n} }];"
+      }
+    },
+    {
+      "name": "Find agreement",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1120,
+        200
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_p2_agreements_TABLE_ID",
+          "cachedResultName": "p2_agreements"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "envelope_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.envelope_id }}"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      }
+    },
+    {
+      "name": "Not handled yet",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        1344,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.status }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "rightValue": "sent"
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "name": "What happened",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1568,
+        200
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "completed",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $(\"Envelope facts\").first().json.status }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "completed"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "declined",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $(\"Envelope facts\").first().json.status }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "declined"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "voided",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $(\"Envelope facts\").first().json.status }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "voided"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "name": "DocuSign: signed PDF",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1792,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://demo.docusign.net/restapi/v2.1/accounts/REPLACE_WITH_DOCUSIGN_ACCOUNT_ID/envelopes/{{ $(\"Envelope facts\").first().json.envelope_id }}/documents/combined",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
+        }
+      },
+      "credentials": {
+        "oAuth2Api": {
+          "name": "Docusign OAuth API"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "name": "Drive: upload signed PDF",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2016,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/upload/drive/v3/files?uploadType=media",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/pdf"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "name": "Drive: name and file it",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2240,
+        0
+      ],
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://www.googleapis.com/drive/v3/files/{{ $json.id }}?addParents=REPLACE_WITH_DRIVE_FOLDER_ID&fields=id,name,webViewLink",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ name: $(\"Envelope facts\").first().json.agreement_number + \" \" + $(\"Find agreement\").first().json.company + \" (signed).pdf\" }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "name": "HubSpot: deal won",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2464,
+        0
+      ],
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.hubapi.com/crm/v3/objects/deals/{{ $(\"Envelope facts\").first().json.hubspot_deal_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "hubspotAppToken",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ properties: { dealstage: \"REPLACE_WITH_WON_STAGE_ID\", closedate: $(\"Envelope facts\").first().json.completed_at || $now.toISO(), description: \"Purchase agreement \" + $(\"Envelope facts\").first().json.agreement_number + \" signed. Signed copy: \" + $json.webViewLink } }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "hubspotAppToken": {
+          "name": "HubSpot Service Key account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "name": "Mark signed",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2688,
+        0
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_p2_agreements_TABLE_ID",
+          "cachedResultName": "p2_agreements"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Find agreement\").first().json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "signed",
+            "signed_at": "={{ $(\"Envelope facts\").first().json.completed_at }}",
+            "drive_file_id": "={{ $(\"Drive: name and file it\").first().json.id }}",
+            "drive_link": "={{ $(\"Drive: name and file it\").first().json.webViewLink }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      }
+    },
+    {
+      "name": "Slack: signed",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.7,
+      "position": [
+        2912,
+        0
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "authentication": "accessToken",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "#leads"
+        },
+        "messageType": "text",
+        "text": "=:white_check_mark: *{{ $(\"Envelope facts\").first().json.agreement_number }} signed* by {{ $(\"Envelope facts\").first().json.signer_name }} ({{ $(\"Find agreement\").first().json.company }}, ${{ Number($(\"Find agreement\").first().json.price).toLocaleString(\"en-US\", { minimumFractionDigits: 2 }) }})\nSigned copy: {{ $(\"Drive: name and file it\").first().json.webViewLink }}\nHubSpot deal {{ $(\"Envelope facts\").first().json.hubspot_deal_id }} moved to Won",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "mrkdwn": true
+        }
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "name": "HubSpot: deal lost",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1792,
+        200
+      ],
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.hubapi.com/crm/v3/objects/deals/{{ $(\"Envelope facts\").first().json.hubspot_deal_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "hubspotAppToken",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ properties: { dealstage: \"REPLACE_WITH_LOST_STAGE_ID\", closed_lost_reason: \"Declined in DocuSign: \" + ($(\"Envelope facts\").first().json.declined_reason || \"no reason given\") } }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "hubspotAppToken": {
+          "name": "HubSpot Service Key account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "name": "Mark declined",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2016,
+        200
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_p2_agreements_TABLE_ID",
+          "cachedResultName": "p2_agreements"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Find agreement\").first().json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "declined",
+            "error": "={{ $(\"Envelope facts\").first().json.declined_reason }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      }
+    },
+    {
+      "name": "Mark voided",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1792,
+        400
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_p2_agreements_TABLE_ID",
+          "cachedResultName": "p2_agreements"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Find agreement\").first().json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "voided",
+            "error": "={{ $(\"Envelope facts\").first().json.voided_reason }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      }
+    },
+    {
+      "name": "Slack: not signed",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.7,
+      "position": [
+        2240,
+        300
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "authentication": "accessToken",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "#leads"
+        },
+        "messageType": "text",
+        "text": "=:x: *{{ $(\"Envelope facts\").first().json.agreement_number }} was {{ $(\"Envelope facts\").first().json.status }}* ({{ $(\"Find agreement\").first().json.company }})\nReason: {{ $(\"Envelope facts\").first().json.declined_reason || $(\"Envelope facts\").first().json.voided_reason || \"none given\" }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "mrkdwn": true
+        }
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "DocuSign Connect event": {
+      "main": [
+        [
+          {
+            "node": "Read event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read event": {
+      "main": [
+        [
+          {
+            "node": "Has an envelope ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has an envelope ID": {
+      "main": [
+        [
+          {
+            "node": "DocuSign: get envelope",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DocuSign: get envelope": {
+      "main": [
+        [
+          {
+            "node": "Envelope facts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Envelope facts": {
+      "main": [
+        [
+          {
+            "node": "Find agreement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find agreement": {
+      "main": [
+        [
+          {
+            "node": "Not handled yet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Not handled yet": {
+      "main": [
+        [
+          {
+            "node": "What happened",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "What happened": {
+      "main": [
+        [
+          {
+            "node": "DocuSign: signed PDF",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HubSpot: deal lost",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark voided",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DocuSign: signed PDF": {
+      "main": [
+        [
+          {
+            "node": "Drive: upload signed PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drive: upload signed PDF": {
+      "main": [
+        [
+          {
+            "node": "Drive: name and file it",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drive: name and file it": {
+      "main": [
+        [
+          {
+            "node": "HubSpot: deal won",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HubSpot: deal won": {
+      "main": [
+        [
+          {
+            "node": "Mark signed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark signed": {
+      "main": [
+        [
+          {
+            "node": "Slack: signed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HubSpot: deal lost": {
+      "main": [
+        [
+          {
+            "node": "Mark declined",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark declined": {
+      "main": [
+        [
+          {
+            "node": "Slack: not signed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark voided": {
+      "main": [
+        [
+          {
+            "node": "Slack: not signed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Chicago",
+    "errorWorkflow": "REPLACE_WITH_ERROR_HANDLER_ID"
+  }
+}

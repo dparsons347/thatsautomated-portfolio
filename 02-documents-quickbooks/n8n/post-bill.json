@@ -565,15 +565,48 @@
       }
     },
     {
-      "id": "48c1343c-0845-4547-aa1b-9bf8bed60bb8",
-      "name": "Review sheet (next step)",
-      "type": "n8n-nodes-base.noOp",
-      "typeVersion": 1,
+      "name": "Send to review sheet",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
       "position": [
         2240,
         400
       ],
-      "parameters": {}
+      "parameters": {
+        "mode": "each",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_SEND_TO_REVIEW_WORKFLOW_ID",
+          "cachedResultName": "P2: Send to review sheet"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "document_id": "={{ $('Plan the Bill').item.json.document_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "document_id",
+              "displayName": "document_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "number"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput",
+      "id": "48c1343c-0845-4547-aa1b-9bf8bed60bb8"
     },
     {
       "id": "b2bb9f2d-8598-48b9-9bcd-621e1597f9e3",
@@ -1078,7 +1111,7 @@
       "main": [
         [
           {
-            "node": "Review sheet (next step)",
+            "node": "Send to review sheet",
             "type": "main",
             "index": 0
           }

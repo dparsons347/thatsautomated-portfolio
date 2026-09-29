@@ -1,0 +1,286 @@
+{
+  "name": "P2: Purchase agreement out for signature",
+  "nodes": [
+    {
+      "name": "Purchase agreement form",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "formTitle": "Purchase agreement",
+        "formDescription": "Fill this in and the customer gets the agreement by DocuSign for signature. Demonstration build for the That's Automated portfolio.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Customer company",
+              "fieldName": "company",
+              "fieldType": "text",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Signer name",
+              "fieldName": "signer_name",
+              "fieldType": "text",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Signer email",
+              "fieldName": "signer_email",
+              "fieldType": "email",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Job site address",
+              "fieldName": "site",
+              "fieldType": "text",
+              "requiredField": false
+            },
+            {
+              "fieldLabel": "Scope of work",
+              "fieldName": "scope",
+              "fieldType": "textarea",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Contract price (USD)",
+              "fieldName": "price",
+              "fieldType": "number",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Deposit (%)",
+              "fieldName": "deposit_pct",
+              "fieldType": "number",
+              "requiredField": true,
+              "defaultValue": "30"
+            },
+            {
+              "fieldLabel": "Start date",
+              "fieldName": "start_date",
+              "fieldType": "date",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Completion date",
+              "fieldName": "finish_date",
+              "fieldType": "date",
+              "requiredField": true
+            }
+          ]
+        },
+        "responseMode": "onReceived",
+        "options": {
+          "path": "p2-purchase-agreement",
+          "buttonLabel": "Send for signature",
+          "appendAttribution": false,
+          "respondWithOptions": {
+            "values": {
+              "respondWith": "text",
+              "formSubmittedText": "Got it. The agreement is being generated and sent to the signer through DocuSign. Watch #leads in Slack for the envelope."
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Build agreement",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Turn the form submission into a purchase agreement and a DocuSign envelope.\n//\n// Pasted as-is into the \"Build agreement\" Code node in n8n. The agreement is\n// plain HTML: DocuSign converts it to PDF when the envelope is created, so\n// there is no PDF renderer to host. The sign-here and date tabs are placed on\n// the anchor strings \\s1\\ and \\d1\\, printed in white so the signer never sees\n// them.\nconst j = $input.first().json;\nconst pick = (key, label) => (j[key] ?? j[label] ?? '');\n\nconst company = String(pick('company', 'Customer company')).trim();\nconst signerName = String(pick('signer_name', 'Signer name')).trim();\nconst signerEmail = String(pick('signer_email', 'Signer email')).trim();\nconst site = String(pick('site', 'Job site address')).trim();\nconst scope = String(pick('scope', 'Scope of work')).trim();\nconst price = Number(String(pick('price', 'Contract price (USD)')).replace(/[$,\\s]/g, ''));\nconst depositRaw = String(pick('deposit_pct', 'Deposit (%)')).replace(/[%\\s]/g, '');\nconst depositPct = depositRaw === '' ? 30 : Number(depositRaw); // 0 is a real answer, blank means the default\nconst startDate = String(pick('start_date', 'Start date')).trim();\nconst finishDate = String(pick('finish_date', 'Completion date')).trim();\n\nconst problems = [];\nif (!company) problems.push('customer company is empty');\nif (!signerName) problems.push('signer name is empty');\nif (!/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(signerEmail)) problems.push('signer email does not look like an email');\nif (!scope) problems.push('scope of work is empty');\nif (!(price > 0)) problems.push('contract price must be more than zero');\nif (!(depositPct >= 0 && depositPct <= 100)) problems.push('deposit must be between 0 and 100 percent');\nif (startDate && finishDate && finishDate < startDate) problems.push('completion date is before the start date');\nif (problems.length) throw new Error('Agreement not sent: ' + problems.join('; '));\n\nconst cents = (n) => Math.round(n * 100) / 100;\nconst deposit = cents(price * depositPct / 100);\nconst balance = cents(price - deposit);\nconst money = (n) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });\nconst esc = (s) => String(s).replace(/[&<>\"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;' }[c]));\nconst niceDate = (d) => (d ? DateTime.fromISO(d).toFormat('LLLL d, yyyy') : 'to be agreed');\n\nconst now = DateTime.now().setZone('America/Chicago');\nconst number = 'PA-' + now.toFormat('yyyyLLdd-HHmmss');\n\nconst html = `<!doctype html>\n<html><head><meta charset=\"utf-8\"><title>Purchase agreement ${number}</title>\n<style>\nbody { font-family: Helvetica, Arial, sans-serif; font-size: 11pt; color: #222; margin: 36px 48px; line-height: 1.4; }\nh1 { font-size: 20pt; margin: 0; }\nh2 { font-size: 12pt; margin: 22px 0 6px; border-bottom: 1px solid #ccc; padding-bottom: 3px; }\n.sub { color: #666; margin-bottom: 18px; }\ntable.money { border-collapse: collapse; width: 60%; }\ntable.money td { padding: 4px 0; }\ntable.money td.amt { text-align: right; }\ntable.money tr.total td { border-top: 1px solid #999; font-weight: bold; }\ntable.sig { width: 100%; margin-top: 36px; }\ntable.sig td { width: 50%; vertical-align: top; padding-right: 24px; }\n.line { border-bottom: 1px solid #333; height: 48px; }\n.anchor { color: #ffffff; font-size: 8pt; }\n.foot { margin-top: 36px; font-size: 8pt; color: #888; }\n</style></head><body>\n<h1>Purchase Agreement</h1>\n<div class=\"sub\">Agreement ${number} &middot; ${now.toFormat('LLLL d, yyyy')}</div>\n\n<p><b>Contractor:</b> Craig's Design and Landscaping Services, 123 Sierra Way, San Pablo, CA</p>\n<p><b>Customer:</b> ${esc(company)}, attention ${esc(signerName)} (${esc(signerEmail)})</p>\n<p><b>Job site:</b> ${esc(site || 'As listed on the work order')}</p>\n\n<h2>Scope of work</h2>\n<p>${esc(scope).replace(/\\n/g, '<br>')}</p>\n\n<h2>Price and payment</h2>\n<table class=\"money\">\n<tr><td>Contract price</td><td class=\"amt\">$${money(price)}</td></tr>\n<tr><td>Deposit due on signing (${depositPct}%)</td><td class=\"amt\">$${money(deposit)}</td></tr>\n<tr class=\"total\"><td>Balance due on completion</td><td class=\"amt\">$${money(balance)}</td></tr>\n</table>\n\n<h2>Schedule</h2>\n<p>Work starts ${niceDate(startDate)} and is expected to be complete by ${niceDate(finishDate)}, weather permitting.</p>\n\n<h2>Terms</h2>\n<ol>\n<li>Changes to the scope or price are made in writing and signed by both parties.</li>\n<li>The balance is due within 15 days of completion.</li>\n<li>The customer may cancel in writing within 3 business days of signing for a full refund of the deposit.</li>\n<li>The contractor carries general liability insurance and will provide a certificate on request.</li>\n</ol>\n\n<table class=\"sig\"><tr>\n<td>Customer signature<div class=\"line\"><span class=\"anchor\">\\\\s1\\\\</span></div>${esc(signerName)}, ${esc(company)}</td>\n<td>Date signed<div class=\"line\"><span class=\"anchor\">\\\\d1\\\\</span></div></td>\n</tr></table>\n\n<p class=\"foot\">Demonstration document for the That's Automated portfolio. Not a real agreement.</p>\n</body></html>`;\n\nconst envelope = {\n  emailSubject: `Please sign: purchase agreement ${number} (demo)`,\n  emailBlurb: `Hi ${signerName}, here is the purchase agreement for ${company}. It takes about a minute to sign.`,\n  documents: [{\n    documentId: '1',\n    name: `Purchase agreement ${number}`,\n    fileExtension: 'html',\n    documentBase64: Buffer.from(html, 'utf8').toString('base64'),\n  }],\n  recipients: {\n    signers: [{\n      recipientId: '1',\n      routingOrder: '1',\n      name: signerName,\n      email: signerEmail,\n      tabs: {\n        signHereTabs: [{ anchorString: '\\\\s1\\\\', anchorUnits: 'pixels', anchorXOffset: '0', anchorYOffset: '-4' }],\n        dateSignedTabs: [{ anchorString: '\\\\d1\\\\', anchorUnits: 'pixels', anchorXOffset: '0', anchorYOffset: '-4' }],\n      },\n    }],\n  },\n  eventNotification: {\n    url: 'https://REPLACE_WITH_N8N_HOST/webhook/p2-docusign-events',\n    requireAcknowledgment: 'true',\n    loggingEnabled: 'true',\n    eventData: { version: 'restv2.1', format: 'json', includeData: ['custom_fields', 'recipients'] },\n    envelopeEvents: [\n      { envelopeEventStatusCode: 'completed' },\n      { envelopeEventStatusCode: 'declined' },\n      { envelopeEventStatusCode: 'voided' },\n    ],\n  },\n  status: 'sent',\n};\n\nreturn [{\n  json: {\n    agreement_number: number,\n    company,\n    signer_name: signerName,\n    signer_email: signerEmail,\n    site,\n    price,\n    deposit_pct: depositPct,\n    deposit,\n    balance,\n    price_text: money(price),\n    deposit_text: money(deposit),\n    start_date: startDate,\n    finish_date: finishDate,\n    envelope,\n  },\n}];\n"
+      }
+    },
+    {
+      "name": "HubSpot: create deal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        448,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.hubapi.com/crm/v3/objects/deals",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "hubspotAppToken",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ properties: { dealname: $json.agreement_number + \" \" + $json.company, amount: String($json.price), pipeline: \"default\", dealstage: \"REPLACE_WITH_CONTACTED_STAGE_ID\", description: \"Purchase agreement \" + $json.agreement_number + \" sent to \" + $json.signer_name + \" <\" + $json.signer_email + \"> for signature.\" } }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "hubspotAppToken": {
+          "name": "HubSpot Service Key account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "name": "DocuSign: send envelope",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://demo.docusign.net/restapi/v2.1/accounts/REPLACE_WITH_DOCUSIGN_ACCOUNT_ID/envelopes",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify(Object.assign({}, $(\"Build agreement\").item.json.envelope, { customFields: { textCustomFields: [ { name: \"agreement_number\", value: $(\"Build agreement\").item.json.agreement_number, show: \"false\" }, { name: \"hubspot_deal_id\", value: String($json.id), show: \"false\" } ] } })) }}",
+        "options": {}
+      },
+      "credentials": {
+        "oAuth2Api": {
+          "name": "Docusign OAuth API"
+        }
+      }
+    },
+    {
+      "name": "Log agreement",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        896,
+        0
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_p2_agreements_TABLE_ID",
+          "cachedResultName": "p2_agreements"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "agreement_number": "={{ $(\"Build agreement\").item.json.agreement_number }}",
+            "company": "={{ $(\"Build agreement\").item.json.company }}",
+            "signer_name": "={{ $(\"Build agreement\").item.json.signer_name }}",
+            "signer_email": "={{ $(\"Build agreement\").item.json.signer_email }}",
+            "price": "={{ $(\"Build agreement\").item.json.price }}",
+            "deposit": "={{ $(\"Build agreement\").item.json.deposit }}",
+            "envelope_id": "={{ $json.envelopeId }}",
+            "hubspot_deal_id": "={{ $(\"HubSpot: create deal\").item.json.id }}",
+            "status": "sent",
+            "sent_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      }
+    },
+    {
+      "name": "Slack: agreement sent",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.7,
+      "position": [
+        1120,
+        0
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "authentication": "accessToken",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "#leads"
+        },
+        "messageType": "text",
+        "text": "=:memo: *Purchase agreement {{ $(\"Build agreement\").item.json.agreement_number }} sent for signature*\n{{ $(\"Build agreement\").item.json.company }}, {{ $(\"Build agreement\").item.json.signer_name }} ({{ $(\"Build agreement\").item.json.signer_email }})\n${{ $(\"Build agreement\").item.json.price_text }}, deposit ${{ $(\"Build agreement\").item.json.deposit_text }}\nDocuSign envelope {{ $(\"DocuSign: send envelope\").item.json.envelopeId }}, HubSpot deal {{ $(\"HubSpot: create deal\").item.json.id }} moved to Contacted",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "mrkdwn": true
+        }
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Purchase agreement form": {
+      "main": [
+        [
+          {
+            "node": "Build agreement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build agreement": {
+      "main": [
+        [
+          {
+            "node": "HubSpot: create deal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HubSpot: create deal": {
+      "main": [
+        [
+          {
+            "node": "DocuSign: send envelope",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DocuSign: send envelope": {
+      "main": [
+        [
+          {
+            "node": "Log agreement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log agreement": {
+      "main": [
+        [
+          {
+            "node": "Slack: agreement sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Chicago",
+    "errorWorkflow": "REPLACE_WITH_ERROR_HANDLER_ID"
+  }
+}

@@ -58,3 +58,49 @@ class PostingWorkflowMatchesModule(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+N8N = os.path.join(HERE, "..", "n8n")
+ROOT = os.path.join(HERE, "..")
+
+
+def load(name):
+    with open(os.path.join(N8N, name), encoding="utf-8") as f:
+        return json.load(f)
+
+
+@unittest.skipUnless(os.path.exists(os.path.join(N8N, "review-approvals.json")), "review exports not present")
+class ReviewAndGenerationExports(unittest.TestCase):
+    def test_code_nodes_are_the_repo_files(self):
+        with open(os.path.join(ROOT, "review", "read-corrections.js"), encoding="utf-8") as f:
+            corrections = f.read()
+        self.assertEqual(node(load("review-approvals.json"), "Read the corrections")["parameters"]["jsCode"], corrections)
+        with open(os.path.join(ROOT, "generate", "build-agreement.js"), encoding="utf-8") as f:
+            build = f.read()
+        exported = node(load("agreement-out.json"), "Build agreement")["parameters"]["jsCode"]
+        self.assertEqual(exported.replace("REPLACE_WITH_N8N_HOST", "n8n.danielparsons.io"), build)
+
+    def test_review_sheet_is_fed_from_both_places(self):
+        self.assertEqual(node(load("document-intake.json"), "Send to review sheet")["type"], "n8n-nodes-base.executeWorkflow")
+        self.assertEqual([c["node"] for c in load("document-intake.json")["connections"]["Ready to post?"]["main"][1]],
+                         ["Send to review sheet"])
+        self.assertEqual([c["node"] for c in load("post-bill.json")["connections"]["Send to review"]["main"][0]],
+                         ["Send to review sheet"])
+
+    def test_approvals_post_one_row_at_a_time(self):
+        self.assertEqual(node(load("review-approvals.json"), "One per run")["parameters"]["maxItems"], 1)
+
+    def test_signed_event_rereads_docusign(self):
+        wf = load("agreement-events.json")
+        self.assertEqual([c["node"] for c in wf["connections"]["Has an envelope ID"]["main"][0]], ["DocuSign: get envelope"])
+        self.assertIn("Not handled yet", wf["connections"]["Find agreement"]["main"][0][0]["node"])
+
+    def test_no_credential_ids_or_instance_ids(self):
+        for name in ["send-to-review.json", "review-approvals.json", "agreement-out.json", "agreement-events.json"]:
+            text = json.dumps(load(name))
+            for secret in ["vw475ktJsCO6X7PO", "u3SlEo4UxfNvTCZl", "1zAonurq6zXaEEmo23TyW0uhbGinP6xhSTvvnEzc_GpU",
+                           "f2ffdd09-2663-40b1-849e-6a61da7fbf8f", "danielparsons.io"]:
+                self.assertNotIn(secret, text, name)
+            for n in load(name)["nodes"]:
+                for cred in (n.get("credentials") or {}).values():
+                    self.assertNotIn("id", cred, n["name"])
