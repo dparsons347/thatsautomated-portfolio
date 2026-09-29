@@ -34,12 +34,13 @@ test('receipt photo is kept, signature logo is skipped', () => {
   assert.equal(L.shouldSkipAttachment('signature-logo.png', 'image/png', size('signature-logo.png')), true);
 });
 
-test('Lib, Main and Setup load together in one global scope', () => {
+test('all Apps Script files load together in one global scope', () => {
   const ctx = vm.createContext({ console });
-  for (const f of ['Lib.js', 'Main.js', 'Setup.js']) {
+  const dir2 = path.join(__dirname, '..', 'apps-script');
+  for (const f of fs.readdirSync(dir2).filter((x) => x.endsWith('.js')).sort()) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'apps-script', f), 'utf8'), ctx, { filename: f });
   }
-  for (const fn of ['setup', 'processInbox', 'onTrackerEdit', 'fridaySummary', 'resetDemo', 'matchClient']) {
+  for (const fn of ['setup', 'processInbox', 'onTrackerEdit', 'fridaySummary', 'resetDemo', 'testChat', 'matchClient']) {
     assert.equal(typeof ctx[fn], 'function', fn);
   }
   assert.equal(ctx.COL['File ID'], 14);

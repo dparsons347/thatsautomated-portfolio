@@ -324,3 +324,4 @@ function fridaySummary_() {
     Utilities.formatDate(new Date(), 'America/Chicago', 'MMM d'), lines.join('\n'));
   log_('INFO', 'Friday summary sent.');
 }
+

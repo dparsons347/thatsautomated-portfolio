@@ -4,7 +4,7 @@ A small tax office's document intake, automated inside the Google Workspace it a
 
 The office, Oakline Tax Group, and its clients are fictional. The mailbox, Drive, Sheets, and Chat space are real.
 
-**Status: built and tested live (Sep 29, 2026). Chat webhook and Looker Studio report still to add, then Loom.**
+**Status: built and tested live (Sep 29, 2026). Chat and the report are connected, demo data reset. Loom pending.**
 
 Changed on Sep 29, 2026 from Microsoft 365 (Power Automate, SharePoint, Power BI) to Google Workspace. Same client story, same failure cases.
 
@@ -37,7 +37,9 @@ Looker Studio report + fridaySummary email (Fridays 4 PM Central)
 |---|---|
 | `apps-script/Lib.js` | Pure logic: client matching, document classification, encrypted-PDF check, attachment skip rule, summary math. No Google services, so it runs under Node. |
 | `apps-script/Main.js` | Entry points `processInbox`, `onTrackerEdit`, `fridaySummary`, and the error wrapper. |
-| `apps-script/Setup.js` | `setup()` (tabs, folders, Gmail labels and filter, triggers; safe to rerun) and `resetDemo()`. |
+| `apps-script/Setup.js` | `setup()`: tabs, folders, Gmail labels and filter, triggers. Safe to rerun. |
+| `apps-script/Reset.js` | `resetDemo()`: clears Intake and Log, trashes client files and intake threads. Run before a Loom take. |
+| `apps-script/Checks.js` | `testChat()`: posts one line to the Chat space to confirm the webhook. |
 | `apps-script/appsscript.json` | Manifest: Central time, V8, Gmail advanced service (for the filter). |
 | `tests/` | `node --test` suites: 22 tests, including the real test-data files. |
 | `test-data/` | Fake W-2, 1099-NEC, bank statement, a password-protected 1099-B (password `oakline`), a phone-photo receipt, a signature logo. `make_test_data.py` rebuilds them. |
@@ -57,7 +59,7 @@ New, Needs assignment (unknown sender), Needs attention (locked PDF or no attach
 | `SPREADSHEET_ID`, `ROOT_FOLDER_ID`, `CLIENT_FILES_FOLDER_ID`, `UNASSIGNED_FOLDER_ID` | `setup()` |
 | `FIRM_NAME`, `ALERT_EMAIL`, `INTAKE_ADDRESS` | `setup()` defaults, editable |
 | `CHAT_WEBHOOK_URL` | by hand (Chat space > Apps & integrations > Webhooks) |
-| `REPORT_URL` | by hand, after the Looker Studio report exists |
+| `REPORT_URL` | by hand: the Data Studio report, `https://datastudio.google.com/reporting/d220f36e-eec8-4e85-837f-f57074ee3bd2` |
 
 ## Setup
 
@@ -80,6 +82,16 @@ Sheet "Oakline Intake Tracker" and its bound script, created with clasp and set 
 | 5 | `Intake` tab renamed to `Intake2`, then an email sent | Pass. processInbox failed with the rename message, alert sent on the first failure and muted on the next, error in Log. After renaming back, the waiting email was filed on the next run |
 
 Found and fixed during the run: Sheets turned the document type "1099" into a number. The Document type and Intake ID columns are now formatted as plain text in `setup()`.
+
+## Report
+
+"Oakline Tax Group: Document Intake" in Data Studio (Google renamed Looker Studio), on the Intake tab: a row table (Intake ID, Client, Document type, Status, Days to assign), documents by status, documents received by ISO week, and scorecards for documents received and average days to assign. Data credentials are the viewer's, so only people with access to the tracker see numbers.
+
+## Before recording
+
+1. Open `Reset.gs` in the editor and run `resetDemo`.
+2. Send the happy-path email from parsodg@gmail.com (client Marcus Rivera) and the unknown-sender email from a second address such as parsodg+hvac1@gmail.com.
+3. Open the Chat space "Oakline Intake" next to the tracker.
 
 ## Tests
 
