@@ -45,6 +45,9 @@ function setupTabs_(ss) {
   intake.getRange(2, COL['Received'], maxRows, 1).setNumberFormat('yyyy-mm-dd hh:mm');
   intake.getRange(2, COL['Assigned at'], maxRows, 1).setNumberFormat('yyyy-mm-dd hh:mm');
   intake.getRange(2, COL['Days to assign'], maxRows, 1).setNumberFormat('0.0');
+  // Plain text, or Sheets turns "1099" and "1098" into numbers.
+  intake.getRange(2, COL['Document type'], maxRows, 1).setNumberFormat('@');
+  intake.getRange(2, COL['Intake ID'], maxRows, 1).setNumberFormat('@');
   log.getRange(2, 1, log.getMaxRows() - 1, 1).setNumberFormat('yyyy-mm-dd hh:mm:ss');
 
   intake.getRange(2, COL['Status'], maxRows, 1).setDataValidation(

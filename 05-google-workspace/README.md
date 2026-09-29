@@ -4,7 +4,7 @@ A small tax office's document intake, automated inside the Google Workspace it a
 
 The office, Oakline Tax Group, and its clients are fictional. The mailbox, Drive, Sheets, and Chat space are real.
 
-**Status: code written and unit tested (Sep 29, 2026). Google side not set up yet.**
+**Status: built and tested live (Sep 29, 2026). Chat webhook and Looker Studio report still to add, then Loom.**
 
 Changed on Sep 29, 2026 from Microsoft 365 (Power Automate, SharePoint, Power BI) to Google Workspace. Same client story, same failure cases.
 
@@ -66,6 +66,20 @@ New, Needs assignment (unknown sender), Needs attention (locked PDF or no attach
 3. `clasp push`, open the script, run `setup()`, approve the scopes.
 4. Create the Chat space "Oakline Intake", add an incoming webhook, paste its URL into the `CHAT_WEBHOOK_URL` script property.
 5. Build the Looker Studio report on the Intake tab, put its link in `REPORT_URL`.
+
+## Live test (Sep 29, 2026)
+
+Sheet "Oakline Intake Tracker" and its bound script, created with clasp and set up with `setup()`. Test emails sent from parsodg@gmail.com (client Marcus Rivera) to daniel+intake@thatsautomated.com. Chat webhook not yet set, so Chat posts were logged instead.
+
+| # | Case | Result |
+|---|---|---|
+| 1 | Client email, W-2 + 1099-NEC + a 700-byte signature logo | Pass. Two rows (W-2, 1099), status New, logo skipped, client folder created, one threaded acknowledgement listing both files |
+| 2 | Password-protected 1099-B | Pass. Saved, row Needs attention with the unlock note |
+| 3 | Unknown sender (Marcus's email blanked in Clients for one send) | Pass. Filed to `_Unassigned`, row Needs assignment. Picking Marcus Rivera in the row moved the file to his folder and set status New |
+| 4 | Status set to Assigned | Pass. Assigned at and Days to assign stamped |
+| 5 | `Intake` tab renamed to `Intake2`, then an email sent | Pass. processInbox failed with the rename message, alert sent on the first failure and muted on the next, error in Log. After renaming back, the waiting email was filed on the next run |
+
+Found and fixed during the run: Sheets turned the document type "1099" into a number. The Document type and Intake ID columns are now formatted as plain text in `setup()`.
 
 ## Tests
 
