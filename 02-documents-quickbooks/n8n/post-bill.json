@@ -1,0 +1,1185 @@
+{
+  "name": "P2: Post bill to QuickBooks",
+  "nodes": [
+    {
+      "id": "156f7a92-a8f3-4438-b42b-ba4d7e4c1223",
+      "name": "Called by intake or review",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "document_id",
+              "type": "number"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "266a18c7-74b8-488f-b58a-b2fa098af293",
+      "name": "QuickBooks config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        224,
+        300
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "doc-id",
+              "name": "document_id",
+              "value": "={{ Number($json.document_id ?? $json.body?.document_id) }}",
+              "type": "number"
+            },
+            {
+              "id": "realm",
+              "name": "realm_id",
+              "value": "REPLACE_WITH_REALM_ID",
+              "type": "string"
+            },
+            {
+              "id": "api",
+              "name": "api",
+              "value": "https://sandbox-quickbooks.api.intuit.com/v3/company/REPLACE_WITH_REALM_ID",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "315dfd69-7569-46f9-8729-fd7cfed98b87",
+      "name": "Post by webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        400
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "p2-post-bill",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "webhookId": "5340cc52-6b72-4a06-a2f6-3eece725db4a"
+    },
+    {
+      "id": "81454982-d30c-4a9c-a065-e2d74a1d4303",
+      "name": "Get document",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        448,
+        300
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_p2_documents_TABLE_ID",
+          "cachedResultName": "p2_documents"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.document_id }}"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      }
+    },
+    {
+      "id": "b3a87d13-f645-40bb-b403-f8ccb693b8ff",
+      "name": "Ready and not posted yet?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        672,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ [\"ready\", \"approved\"].includes($json.status) }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            },
+            {
+              "leftValue": "={{ $json.qbo_bill_id ?? \"\" }}",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "72b32c17-197a-4eb1-9c7c-1c4704297aab",
+      "name": "QBO: list vendors",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        896,
+        200
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $(\"QuickBooks config\").first().json.api }}/query",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "quickBooksOAuth2Api",
+        "sendQuery": true,
+        "specifyQuery": "keypair",
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "select Id, DisplayName, CompanyName, Active from Vendor where Active = true maxresults 1000"
+            },
+            {
+              "name": "minorversion",
+              "value": "75"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "credentials": {
+        "quickBooksOAuth2Api": {
+          "name": "QuickBooks Online account"
+        }
+      }
+    },
+    {
+      "id": "2173af3f-8929-4523-9d9b-2724c398a3bc",
+      "name": "QBO: list accounts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1120,
+        200
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $(\"QuickBooks config\").first().json.api }}/query",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "quickBooksOAuth2Api",
+        "sendQuery": true,
+        "specifyQuery": "keypair",
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "select Id, Name, FullyQualifiedName, AccountType from Account where Active = true maxresults 1000"
+            },
+            {
+              "name": "minorversion",
+              "value": "75"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "credentials": {
+        "quickBooksOAuth2Api": {
+          "name": "QuickBooks Online account"
+        }
+      }
+    },
+    {
+      "id": "9a4809cb-fa23-43ed-87c3-d030477fbed7",
+      "name": "Collect inputs",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1344,
+        200
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "doc",
+              "name": "doc",
+              "value": "={{ $(\"Get document\").first().json }}",
+              "type": "object"
+            },
+            {
+              "id": "vendors",
+              "name": "vendors",
+              "value": "={{ $(\"QBO: list vendors\").first().json.QueryResponse?.Vendor ?? [] }}",
+              "type": "array"
+            },
+            {
+              "id": "accounts",
+              "name": "accounts",
+              "value": "={{ $json.QueryResponse?.Account ?? [] }}",
+              "type": "array"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "b8ee44ba-4fe3-4439-b10f-9836c82dd605",
+      "name": "Plan the Bill",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "pythonNative",
+        "pythonCode": "# Decide whether an extracted invoice can be posted to QuickBooks, and build\n# the Bill if it can.\n#\n# This file is pasted as-is into the \"Plan the Bill\" Python Code node in n8n,\n# so it sticks to what that sandbox allows: json, re and decimal only, no\n# dunder names, no I/O. client.py and the tests import it normally.\n\nimport json\nimport re\nfrom decimal import Decimal, InvalidOperation, ROUND_HALF_UP\n\nCENT = Decimal(\"0.01\")\nDOC_NUMBER_MAX = 21          # QuickBooks limit on Bill.DocNumber\nPRIVATE_NOTE_MAX = 4000\nDESCRIPTION_MAX = 4000\n\n# Expense account per vendor, by the account's FullyQualifiedName in QuickBooks.\n# Anything not listed goes to DEFAULT_ACCOUNT. Names, not IDs, so the same map\n# works against any company that has these accounts.\nDEFAULT_ACCOUNT = \"Job Expenses:Job Materials\"\nVENDOR_ACCOUNTS = {\n    \"ellis equipment rental\": \"Equipment Rental\",\n    \"tim philip masonry\": \"Job Expenses:Job Materials:Decks and Patios\",\n}\nTAX_LINE_DESCRIPTION = \"Sales tax\"\n\nVENDOR_QUERY = \"select Id, DisplayName, CompanyName, Active from Vendor where Active = true maxresults 1000\"\nACCOUNT_QUERY = (\"select Id, Name, FullyQualifiedName, AccountType from Account \"\n                 \"where Active = true maxresults 1000\")\n\nSUFFIXES = {\"inc\", \"incorporated\", \"llc\", \"ltd\", \"co\", \"corp\", \"corporation\", \"company\", \"the\"}\n\n\ndef money(value):\n    \"\"\"Number or numeric string -> Decimal cents, or None.\"\"\"\n    if value is None or isinstance(value, bool) or value == \"\":\n        return None\n    text = repr(value) if isinstance(value, (int, float)) else re.sub(r\"[,$\\s]\", \"\", str(value))\n    try:\n        return Decimal(text).quantize(CENT, rounding=ROUND_HALF_UP)\n    except (InvalidOperation, ValueError):\n        return None\n\n\ndef normalize_name(name):\n    \"\"\"'Norton Lumber & Building Materials, Inc.' -> 'norton lumber and building materials'\"\"\"\n    text = str(name or \"\").lower().replace(\"&\", \" and \")\n    text = re.sub(\"['’]\", \"\", text)\n    text = re.sub(r\"[^a-z0-9 ]+\", \" \", text)\n    words = [w for w in text.split() if w not in SUFFIXES]\n    return \" \".join(words)\n\n\ndef match_vendor(name, vendors):\n    \"\"\"Find the QuickBooks vendor for an extracted vendor name.\n\n    vendors: list of Vendor objects from the query API (Id, DisplayName,\n    CompanyName). Exact match after normalizing wins. Otherwise a single\n    vendor whose name contains the other (or is contained in it) is accepted\n    when the shorter name is at least 60% of the longer one. Anything else is\n    no match, because posting to the wrong vendor is worse than a review.\n\n    Returns (vendor or None, reason).\n    \"\"\"\n    target = normalize_name(name)\n    if not target:\n        return None, \"no vendor name to match\"\n    exact = []\n    partial = []\n    for v in vendors or []:\n        names = {normalize_name(v.get(\"DisplayName\")), normalize_name(v.get(\"CompanyName\"))} - {\"\"}\n        if target in names:\n            exact.append(v)\n            continue\n        for n in names:\n            short, long_ = sorted([n, target], key=len)\n            if short and short in long_ and len(short) >= 0.6 * len(long_):\n                partial.append(v)\n                break\n    if len(exact) == 1:\n        return exact[0], \"\"\n    if len(exact) > 1:\n        return None, \"vendor \\\"\" + str(name) + \"\\\" matches \" + str(len(exact)) + \" QuickBooks vendors\"\n    if len(partial) == 1:\n        return partial[0], \"\"\n    if len(partial) > 1:\n        names = \", \".join(sorted(str(v.get(\"DisplayName\")) for v in partial))\n        return None, \"vendor \\\"\" + str(name) + \"\\\" could be any of: \" + names\n    return None, \"vendor \\\"\" + str(name) + \"\\\" is not in QuickBooks\"\n\n\ndef find_account(full_name, accounts):\n    \"\"\"Account object whose FullyQualifiedName (or Name) matches, case-insensitive.\"\"\"\n    want = str(full_name or \"\").strip().lower()\n    for a in accounts or []:\n        if str(a.get(\"FullyQualifiedName\", \"\")).lower() == want:\n            return a\n    for a in accounts or []:\n        if str(a.get(\"Name\", \"\")).lower() == want:\n            return a\n    return None\n\n\ndef account_for_vendor(vendor, accounts):\n    \"\"\"Returns (account or None, reason).\"\"\"\n    key = normalize_name(vendor.get(\"DisplayName\"))\n    wanted = VENDOR_ACCOUNTS.get(key, DEFAULT_ACCOUNT)\n    acct = find_account(wanted, accounts)\n    if acct is None and wanted != DEFAULT_ACCOUNT:\n        acct = find_account(DEFAULT_ACCOUNT, accounts)\n    if acct is None:\n        return None, \"expense account \\\"\" + wanted + \"\\\" not found in QuickBooks\"\n    return acct, \"\"\n\n\ndef quote(value):\n    \"\"\"Escape a value for a QuickBooks query string literal.\"\"\"\n    return \"'\" + str(value).replace(\"\\\\\", \"\\\\\\\\\").replace(\"'\", \"\\\\'\") + \"'\"\n\n\ndef duplicate_query(vendor_id, doc_number):\n    return (\"select Id, DocNumber, TotalAmt, TxnDate from Bill where VendorRef = \" + quote(vendor_id)\n            + \" and DocNumber = \" + quote(doc_number))\n\n\ndef parse_lines(doc):\n    raw = doc.get(\"line_items_json\")\n    if raw is None:\n        raw = doc.get(\"line_items\")\n    if isinstance(raw, str):\n        try:\n            raw = json.loads(raw) if raw.strip() else []\n        except ValueError:\n            return None\n    if not isinstance(raw, list):\n        return None\n    return [r for r in raw if isinstance(r, dict)]\n\n\ndef build_bill(doc, vendor, account):\n    \"\"\"Bill payload for the QuickBooks API, or (None, reasons) if it can't be built.\n\n    One AccountBasedExpense line per invoice line, plus a tax line when the\n    invoice shows tax. The lines must add up to the invoice total to the cent,\n    so the Bill in QuickBooks always matches the paper.\n    \"\"\"\n    reasons = []\n    doc_number = str(doc.get(\"invoice_number\") or \"\").strip()\n    if not doc_number:\n        reasons.append(\"invoice number missing\")\n    elif len(doc_number) > DOC_NUMBER_MAX:\n        reasons.append(\"invoice number is longer than QuickBooks allows (\" + str(DOC_NUMBER_MAX) + \")\")\n    if not doc.get(\"invoice_date\"):\n        reasons.append(\"invoice date missing\")\n    total = money(doc.get(\"total\"))\n    if total is None or total <= 0:\n        reasons.append(\"total missing or not positive\")\n    rows = parse_lines(doc)\n    if not rows:\n        reasons.append(\"no line items to post\")\n        rows = []\n\n    acct_ref = {\"value\": str(account.get(\"Id\")), \"name\": account.get(\"FullyQualifiedName\") or account.get(\"Name\")}\n    lines = []\n    line_sum = Decimal(\"0.00\")\n    for n, row in enumerate(rows, start=1):\n        amount = money(row.get(\"amount\"))\n        if amount is None:\n            reasons.append(\"line \" + str(n) + \" has no amount\")\n            continue\n        line_sum += amount\n        desc = str(row.get(\"description\") or \"\").strip()\n        qty = row.get(\"quantity\")\n        price = row.get(\"unit_price\")\n        if qty not in (None, \"\", 1, 1.0) and price not in (None, \"\"):\n            desc = desc + \" (\" + (\"{:g}\".format(float(qty))) + \" @ \" + \"{:,.2f}\".format(float(price)) + \")\"\n        lines.append({\n            \"LineNum\": len(lines) + 1,\n            \"Amount\": float(amount),\n            \"Description\": desc[:DESCRIPTION_MAX],\n            \"DetailType\": \"AccountBasedExpenseLineDetail\",\n            \"AccountBasedExpenseLineDetail\": {\"AccountRef\": acct_ref},\n        })\n    tax = money(doc.get(\"tax\"))\n    if tax is not None and tax != 0:\n        line_sum += tax\n        lines.append({\n            \"LineNum\": len(lines) + 1,\n            \"Amount\": float(tax),\n            \"Description\": TAX_LINE_DESCRIPTION,\n            \"DetailType\": \"AccountBasedExpenseLineDetail\",\n            \"AccountBasedExpenseLineDetail\": {\"AccountRef\": acct_ref},\n        })\n    if total is not None and lines and line_sum != total:\n        reasons.append(\"Bill lines add to $\" + \"{:,.2f}\".format(line_sum) + \" but the invoice total is $\"\n                       + \"{:,.2f}\".format(total))\n    if reasons:\n        return None, reasons\n\n    note_parts = [\"Posted by the AP intake workflow from \" + str(doc.get(\"filename\") or \"an emailed file\")]\n    if doc.get(\"po_number\"):\n        note_parts.append(\"PO \" + str(doc.get(\"po_number\")))\n    if doc.get(\"sha256\"):\n        note_parts.append(\"sha256 \" + str(doc.get(\"sha256\"))[:12])\n    if doc.get(\"id\") is not None:\n        note_parts.append(\"p2_documents row \" + str(doc.get(\"id\")))\n    bill = {\n        \"VendorRef\": {\"value\": str(vendor.get(\"Id\")), \"name\": vendor.get(\"DisplayName\")},\n        \"DocNumber\": doc_number,\n        \"TxnDate\": str(doc.get(\"invoice_date\")),\n        \"Line\": lines,\n        \"PrivateNote\": \". \".join(note_parts)[:PRIVATE_NOTE_MAX],\n    }\n    if doc.get(\"due_date\"):\n        bill[\"DueDate\"] = str(doc.get(\"due_date\"))\n    return bill, []\n\n\ndef plan_bill(doc, vendors, accounts):\n    \"\"\"Everything n8n needs to decide the next step for one document.\n\n    action is \"post\" (bill and duplicate_query are set) or \"review\"\n    (review_reasons says why).\n    \"\"\"\n    base = {\"action\": \"review\", \"vendor_id\": \"\", \"vendor_display_name\": \"\", \"account_id\": \"\",\n            \"bill\": None, \"duplicate_query\": \"\", \"review_reasons\": []}\n    vendor, why = match_vendor(doc.get(\"vendor_name\"), vendors)\n    if vendor is None:\n        base[\"review_reasons\"] = [why]\n        return base\n    base[\"vendor_id\"] = str(vendor.get(\"Id\"))\n    base[\"vendor_display_name\"] = vendor.get(\"DisplayName\") or \"\"\n    account, why = account_for_vendor(vendor, accounts)\n    if account is None:\n        base[\"review_reasons\"] = [why]\n        return base\n    base[\"account_id\"] = str(account.get(\"Id\"))\n    bill, reasons = build_bill(doc, vendor, account)\n    if reasons:\n        base[\"review_reasons\"] = reasons\n        return base\n    base[\"action\"] = \"post\"\n    base[\"bill\"] = bill\n    base[\"duplicate_query\"] = duplicate_query(vendor.get(\"Id\"), bill[\"DocNumber\"])\n    return base\n\n\ndef query_rows(response, entity):\n    \"\"\"Pull the list of objects out of a query API response.\"\"\"\n    if not isinstance(response, dict):\n        return []\n    qr = response.get(\"QueryResponse\") or {}\n    rows = qr.get(entity) or []\n    return rows if isinstance(rows, list) else []\n\n\n# ---- n8n node body (everything above is qbo/bill.py verbatim) ----\nsrc = _item[\"json\"]\nplan = plan_bill(src.get(\"doc\") or {}, src.get(\"vendors\") or [], src.get(\"accounts\") or [])\nout = dict(plan)\nout[\"document_id\"] = (src.get(\"doc\") or {}).get(\"id\")\nreturn {\"json\": out}\n"
+      }
+    },
+    {
+      "id": "2594feae-121c-4ecb-b2a0-24d898546b96",
+      "name": "Post it?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1792,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.action }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "rightValue": "post"
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "6aef9746-37b1-40bb-9911-946869759cd3",
+      "name": "QBO: find existing Bill",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2016,
+        100
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $(\"QuickBooks config\").first().json.api }}/query",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "quickBooksOAuth2Api",
+        "sendQuery": true,
+        "specifyQuery": "keypair",
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "={{ $json.duplicate_query }}"
+            },
+            {
+              "name": "minorversion",
+              "value": "75"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "credentials": {
+        "quickBooksOAuth2Api": {
+          "name": "QuickBooks Online account"
+        }
+      }
+    },
+    {
+      "id": "a120d097-de16-423d-bf66-cb27b3173ab6",
+      "name": "Already in QuickBooks?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2240,
+        100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ ($json.QueryResponse?.Bill ?? []).length > 0 }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "086e22cd-71cf-43e1-96b2-5585c8d68c6b",
+      "name": "Mark already in QBO",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2464,
+        0
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_p2_documents_TABLE_ID",
+          "cachedResultName": "p2_documents"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Plan the Bill\").item.json.document_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "already_in_qbo",
+            "qbo_bill_id": "={{ $json.QueryResponse.Bill[0].Id }}",
+            "review_reasons": "=same vendor and invoice number already in QuickBooks as Bill {{ $json.QueryResponse.Bill[0].Id }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "7d724b37-9d76-4b65-b615-7285067654c1",
+      "name": "Alert: already in QuickBooks",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.7,
+      "position": [
+        2688,
+        0
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "authentication": "accessToken",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "#automation-alerts"
+        },
+        "messageType": "text",
+        "text": "=:no_entry_sign: *Duplicate bill not posted*\n{{ $(\"Plan the Bill\").item.json.vendor_display_name }} invoice {{ $(\"Plan the Bill\").item.json.bill.DocNumber }} is already in QuickBooks as Bill {{ $(\"QBO: find existing Bill\").item.json.QueryResponse.Bill[0].Id }} (${{ $(\"QBO: find existing Bill\").item.json.QueryResponse.Bill[0].TotalAmt }}). File: {{ $(\"Get document\").first().json.filename }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "mrkdwn": true
+        }
+      },
+      "webhookId": "85605b71-2522-4c40-bd04-bc29d7e9f3cf",
+      "credentials": {
+        "slackApi": {
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "id": "041ab307-6808-455e-8ffc-16382c6f38e0",
+      "name": "QBO: create Bill",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2464,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $(\"QuickBooks config\").first().json.api }}/bill",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "quickBooksOAuth2Api",
+        "sendQuery": true,
+        "specifyQuery": "keypair",
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "minorversion",
+              "value": "75"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($(\"Plan the Bill\").item.json.bill) }}",
+        "options": {}
+      },
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "quickBooksOAuth2Api": {
+          "name": "QuickBooks Online account"
+        }
+      }
+    },
+    {
+      "id": "06b94b14-0075-42d2-ad49-9968ef4711a2",
+      "name": "Send to review",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2016,
+        400
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_p2_documents_TABLE_ID",
+          "cachedResultName": "p2_documents"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.document_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "needs_review",
+            "review_reasons": "={{ ($json.review_reasons ?? []).join(\"; \") }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "48c1343c-0845-4547-aa1b-9bf8bed60bb8",
+      "name": "Review sheet (next step)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2240,
+        400
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "b2bb9f2d-8598-48b9-9bcd-621e1597f9e3",
+      "name": "Skip: not ready or already posted",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        896,
+        480
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "d19e8e1b-e3ec-45f8-9037-27d80e2dd0c3",
+      "name": "Mark posted",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2688,
+        200
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_p2_documents_TABLE_ID",
+          "cachedResultName": "p2_documents"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Plan the Bill\").item.json.document_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "posted",
+            "qbo_bill_id": "={{ $json.Bill.Id }}",
+            "error": ""
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "9e83c770-bf1b-4a87-bb4a-d702cbd198f9",
+      "name": "Fetch original email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        2912,
+        200
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "get",
+        "authentication": "oAuth2",
+        "messageId": "={{ $(\"Get document\").first().json.gmail_message_id }}",
+        "simple": false,
+        "options": {
+          "downloadAttachments": true,
+          "dataPropertyAttachmentsPrefixName": "attachment_"
+        }
+      },
+      "webhookId": "0cbfe147-d963-42ea-b1ab-0de08a39fae2",
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail thatsautomated"
+        }
+      }
+    },
+    {
+      "id": "c90fed86-890b-4632-9d9a-364c1e435703",
+      "name": "Prepare attachment",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3136,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Two binary parts for the QuickBooks /upload endpoint: the Attachable\n// metadata (sent as a JSON file so its part carries Content-Type:\n// application/json, which QuickBooks requires) and the original attachment\n// from the email. One document per run, so .first() is safe here.\nconst doc = $('Get document').first().json;\nconst billId = String($('QBO: create Bill').first().json.Bill.Id);\nconst key = 'attachment_' + doc.attachment_index;\nconst item = $input.first();\nconst bin = item.binary && item.binary[key];\nif (!bin) {\n  throw new Error(`Attachment ${key} not found on Gmail message ${doc.gmail_message_id}`);\n}\nconst mime = doc.mime_type || bin.mimeType || 'application/octet-stream';\nconst fname = String(doc.filename || bin.fileName || 'invoice').replace(/\"/g, '');\nconst metadata = {\n  AttachableRef: [{ EntityRef: { type: 'Bill', value: billId }, IncludeOnSend: false }],\n  FileName: fname,\n  ContentType: mime,\n};\nconst meta = await this.helpers.prepareBinaryData(Buffer.from(JSON.stringify(metadata), 'utf8'), 'attachment.json', 'application/json');\nreturn [{\n  json: { bill_id: billId, filename: fname },\n  binary: { meta, file: { ...bin, fileName: fname, mimeType: mime } },\n}];"
+      }
+    },
+    {
+      "id": "c832eaa1-bbad-4190-a3aa-b5f889a64c54",
+      "name": "QBO: attach file to Bill",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        3360,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $(\"QuickBooks config\").first().json.api }}/upload",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "quickBooksOAuth2Api",
+        "sendQuery": true,
+        "specifyQuery": "keypair",
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "minorversion",
+              "value": "75"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file_metadata_01",
+              "inputDataFieldName": "meta"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "file_content_01",
+              "inputDataFieldName": "file"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "quickBooksOAuth2Api": {
+          "name": "QuickBooks Online account"
+        }
+      }
+    },
+    {
+      "id": "039cab6c-da6b-4d4f-a545-df86c4a775ea",
+      "name": "Attached cleanly?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3584,
+        100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ !!$json.AttachableResponse?.[0]?.Attachable?.Id && !$json.Fault && !$json.AttachableResponse?.[0]?.Fault }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "c6954156-1750-4480-9d30-6956791d9472",
+      "name": "Posted with file attached",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        3808,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "15aab0d7-a0c0-4142-91ca-45f6bf6a20f7",
+      "name": "Alert: file not attached",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.7,
+      "position": [
+        3808,
+        300
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "authentication": "accessToken",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "#automation-alerts"
+        },
+        "messageType": "text",
+        "text": "=:warning: *Bill posted, but the invoice file did not attach*\nBill {{ $(\"QBO: create Bill\").item.json.Bill.Id }}, {{ $(\"Plan the Bill\").item.json.vendor_display_name }} invoice {{ $(\"Plan the Bill\").item.json.bill.DocNumber }}\nFile: {{ $(\"Get document\").first().json.filename }}\nError: {{ $json.error?.message ?? ($json.Fault ?? $json.AttachableResponse?.[0]?.Fault)?.Error?.[0]?.Detail ?? JSON.stringify($json).slice(0, 300) }}\nAttach it by hand in QuickBooks. The Bill itself is fine.",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "mrkdwn": true
+        }
+      },
+      "webhookId": "7f32704a-4015-4bed-b1e2-418d6706c82c",
+      "credentials": {
+        "slackApi": {
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "id": "131737a6-7919-4e6e-b9cb-aeb0724df6b5",
+      "name": "Create failed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2688,
+        400
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const e = $json.error ?? {};\nconst msg = [e.message, e.description].filter(Boolean).join(' | ') || JSON.stringify($json).slice(0, 500);\nreturn { json: { document_id: $('Plan the Bill').item.json.document_id, error: msg.slice(0, 1000) } };"
+      }
+    },
+    {
+      "id": "0295cfa3-4950-49d4-9f12-2f75d6f02d1f",
+      "name": "Mark post failed",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2912,
+        400
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_p2_documents_TABLE_ID",
+          "cachedResultName": "p2_documents"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.document_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "post_failed",
+            "error": "={{ $json.error }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "32d27500-7ce9-4ff2-a4a4-fd893d74d3d4",
+      "name": "Alert: Bill not created",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.7,
+      "position": [
+        3136,
+        400
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "authentication": "accessToken",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "#automation-alerts"
+        },
+        "messageType": "text",
+        "text": "=:rotating_light: *QuickBooks rejected the Bill*\n{{ $(\"Plan the Bill\").item.json.vendor_display_name }} invoice {{ $(\"Plan the Bill\").item.json.bill.DocNumber }}, file {{ $(\"Get document\").first().json.filename }}\nError: {{ $(\"Create failed\").item.json.error }}\nRow {{ $(\"Create failed\").item.json.document_id }} in p2_documents is marked post_failed. Fix the cause and POST the row id to /webhook/p2-post-bill to retry.",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "mrkdwn": true
+        }
+      },
+      "webhookId": "a490d7c6-30e4-4678-9e87-bfabdf007551",
+      "credentials": {
+        "slackApi": {
+          "name": "Slack account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Called by intake or review": {
+      "main": [
+        [
+          {
+            "node": "QuickBooks config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QuickBooks config": {
+      "main": [
+        [
+          {
+            "node": "Get document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post by webhook": {
+      "main": [
+        [
+          {
+            "node": "QuickBooks config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get document": {
+      "main": [
+        [
+          {
+            "node": "Ready and not posted yet?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ready and not posted yet?": {
+      "main": [
+        [
+          {
+            "node": "QBO: list vendors",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip: not ready or already posted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QBO: list vendors": {
+      "main": [
+        [
+          {
+            "node": "QBO: list accounts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QBO: list accounts": {
+      "main": [
+        [
+          {
+            "node": "Collect inputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect inputs": {
+      "main": [
+        [
+          {
+            "node": "Plan the Bill",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan the Bill": {
+      "main": [
+        [
+          {
+            "node": "Post it?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post it?": {
+      "main": [
+        [
+          {
+            "node": "QBO: find existing Bill",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send to review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QBO: find existing Bill": {
+      "main": [
+        [
+          {
+            "node": "Already in QuickBooks?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Already in QuickBooks?": {
+      "main": [
+        [
+          {
+            "node": "Mark already in QBO",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "QBO: create Bill",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark already in QBO": {
+      "main": [
+        [
+          {
+            "node": "Alert: already in QuickBooks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QBO: create Bill": {
+      "main": [
+        [
+          {
+            "node": "Mark posted",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send to review": {
+      "main": [
+        [
+          {
+            "node": "Review sheet (next step)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark posted": {
+      "main": [
+        [
+          {
+            "node": "Fetch original email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch original email": {
+      "main": [
+        [
+          {
+            "node": "Prepare attachment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare attachment": {
+      "main": [
+        [
+          {
+            "node": "QBO: attach file to Bill",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QBO: attach file to Bill": {
+      "main": [
+        [
+          {
+            "node": "Attached cleanly?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert: file not attached",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attached cleanly?": {
+      "main": [
+        [
+          {
+            "node": "Posted with file attached",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert: file not attached",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create failed": {
+      "main": [
+        [
+          {
+            "node": "Mark post failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark post failed": {
+      "main": [
+        [
+          {
+            "node": "Alert: Bill not created",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Chicago",
+    "errorWorkflow": "REPLACE_WITH_ERROR_HANDLER_ID"
+  }
+}

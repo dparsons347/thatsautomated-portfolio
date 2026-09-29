@@ -45,7 +45,7 @@ def money(value):
 def normalize_name(name):
     """'Norton Lumber & Building Materials, Inc.' -> 'norton lumber and building materials'"""
     text = str(name or "").lower().replace("&", " and ")
-    text = re.sub("['\u2019]", "", text)
+    text = re.sub("['’]", "", text)
     text = re.sub(r"[^a-z0-9 ]+", " ", text)
     words = [w for w in text.split() if w not in SUFFIXES]
     return " ".join(words)
