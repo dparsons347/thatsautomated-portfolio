@@ -1,0 +1,1156 @@
+{
+  "name": "P6: Slack actions",
+  "nodes": [
+    {
+      "id": "1bc81552-f1e4-402c-a220-82dc423594b9",
+      "name": "Slack action",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        400
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "p6-slack-actions",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      }
+    },
+    {
+      "id": "67a78af9-f02b-4a41-9d4c-e9ab03407c33",
+      "name": "Ack within 3s",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        220,
+        400
+      ],
+      "parameters": {
+        "respondWith": "noData",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "2f34d178-0669-4375-8112-7c8d1c507239",
+      "name": "Read raw body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        400
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "\nconst item = $input.first();\nlet raw = '';\nif (item.binary && item.binary.data) {\n  try {\n    const buf = await this.helpers.getBinaryDataBuffer(0, 'data');\n    raw = buf.toString('utf8');\n  } catch (e) {\n    raw = Buffer.from(item.binary.data.data, 'base64').toString('utf8');\n  }\n}\nconst h = item.json.headers || {};\nreturn [{ json: { timestamp: String(h['x-slack-request-timestamp'] || ''), signature: String(h['x-slack-signature'] || ''), body: raw } }];\n"
+      }
+    },
+    {
+      "id": "b781d51b-8ce5-4379-9fa0-0ceb55e7888e",
+      "name": "Verify Slack signature",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        660,
+        400
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://triage-api:8000/slack/verify",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ timestamp: $json.timestamp, signature: $json.signature, body: $json.body }) }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "P2 webhook key"
+        }
+      }
+    },
+    {
+      "id": "5bcd9524-9830-4a0d-b1ab-98d3390f2cbc",
+      "name": "Signed by Slack",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        400
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.valid }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "03de8766-0798-434c-88d0-494a7893950d",
+      "name": "Parse action",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        400
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "\nconst raw = $('Read raw body').first().json.body;\nlet payloadStr = '';\ntry { payloadStr = new URLSearchParams(raw).get('payload') || ''; } catch (e) {}\nif (!payloadStr) payloadStr = (($('Slack action').first().json.body) || {}).payload || '';\nconst p = JSON.parse(payloadStr);\nconst out = { type: p.type, user: (p.user || {}).id || '', action: 'ignore', message_id: '', channel: '', ts: '',\n  trigger_id: p.trigger_id || '', selected_user: '', text: '' };\nif (p.type === 'block_actions' && p.actions && p.actions[0]) {\n  const a = p.actions[0];\n  const bid = String(a.block_id || '');\n  if (bid.startsWith('p6|')) { out.message_id = bid.slice(3); out.action = a.action_id; out.selected_user = a.selected_user || ''; }\n  out.channel = (p.container || {}).channel_id || (p.channel || {}).id || '';\n  out.ts = (p.container || {}).message_ts || '';\n} else if (p.type === 'view_submission' && p.view && p.view.callback_id === 'p6_edit') {\n  const meta = JSON.parse(p.view.private_metadata || '{}');\n  out.action = 'send_edited';\n  out.message_id = meta.message_id || ''; out.channel = meta.channel || ''; out.ts = meta.ts || '';\n  const v = (((p.view.state || {}).values || {}).reply_block || {}).reply_text || {};\n  out.text = v.value || '';\n}\nreturn [{ json: out }];\n"
+      }
+    },
+    {
+      "id": "57ed8ea0-5c06-4a17-9702-a91399a9bc79",
+      "name": "Ours",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        1320,
+        400
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.action }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              },
+              "rightValue": "ignore"
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "bb545a8b-fc7d-41a5-9359-77179602a50b",
+      "name": "Get message",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1540,
+        400
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "2fuXxILWb9ViQEl2",
+          "cachedResultName": "p6_messages"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "message_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.message_id }}"
+            }
+          ]
+        },
+        "limit": 1
+      }
+    },
+    {
+      "id": "5af0561e-54f4-47a3-ab39-74fd1ed90248",
+      "name": "Decide",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        400
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "\nconst a = $('Parse action').first().json;\nconst row = $input.first().json;\nconst done = ['sent', 'routed', 'archived'].includes(row.status);\nreturn [{ json: { ...a, action: done ? 'already' : a.action, row } }];\n"
+      }
+    },
+    {
+      "id": "118e5e94-3be3-4910-b821-0259f992d41d",
+      "name": "Which action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1980,
+        400
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "send",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "approve"
+                  },
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "send_edited"
+                  }
+                ],
+                "combinator": "or"
+              }
+            },
+            {
+              "outputKey": "edit",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "edit"
+                  }
+                ],
+                "combinator": "or"
+              }
+            },
+            {
+              "outputKey": "reassign",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "reassign"
+                  }
+                ],
+                "combinator": "or"
+              }
+            },
+            {
+              "outputKey": "archive",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "archive"
+                  }
+                ],
+                "combinator": "or"
+              }
+            },
+            {
+              "outputKey": "already",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "already"
+                  }
+                ],
+                "combinator": "or"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "0935f4d1-b8af-4933-90dc-1294c6467bbc",
+      "name": "Build email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2220,
+        100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "\nconst d = $('Decide').first().json;\nconst row = d.row;\nconst text = String(d.action === 'approve' ? (row.draft || '') : (d.text || '')).trim();\nif (!text) throw new Error('Nothing to send: the reply is empty');\nconst subj = /^re:/i.test(row.subject || '') ? row.subject : 'Re: ' + (row.subject || '');\nconst b64 = s => Buffer.from(s, 'utf8').toString('base64');\nconst name = String(row.from_name || '').replace(/[\"\\r\\n]/g, '');\nconst refs = [row.references_hdr, row.rfc_message_id].filter(Boolean).join(' ');\nconst headers = [\n  'From: \"Daniel Parsons\" <daniel@thatsautomated.com>',\n  'To: ' + (name ? '\"' + name + '\" ' : '') + '<' + row.from_email + '>',\n  'Reply-To: daniel+support@thatsautomated.com',\n  'Subject: =?UTF-8?B?' + b64(subj) + '?=',\n  row.rfc_message_id ? 'In-Reply-To: ' + row.rfc_message_id : '',\n  refs ? 'References: ' + refs : '',\n  'MIME-Version: 1.0',\n  'Content-Type: text/plain; charset=UTF-8',\n  'Content-Transfer-Encoding: base64',\n].filter(Boolean);\nconst body = b64(text.replace(/\\r?\\n/g, '\\r\\n')).replace(/(.{76})/g, '$1\\r\\n');\nconst mime = headers.join('\\r\\n') + '\\r\\n\\r\\n' + body;\nconst raw = b64(mime).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');\nreturn [{ json: { raw, threadId: row.thread_id, text } }];\n"
+      }
+    },
+    {
+      "id": "84b830ad-631b-45f9-8f4c-10ee2d0c8a08",
+      "name": "Send via Gmail",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2440,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "gmailOAuth2",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ raw: $json.raw, threadId: $json.threadId }) }}"
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail thatsautomated"
+        }
+      }
+    },
+    {
+      "id": "a42edd6a-1a34-4ce5-9a34-0acce6dd9164",
+      "name": "Label Replied",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2660,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://gmail.googleapis.com/gmail/v1/users/me/threads/{{ $('Decide').first().json.row.thread_id }}/modify",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "gmailOAuth2",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ addLabelIds: [\"Label_6\"], removeLabelIds: [\"UNREAD\"] }) }}"
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail thatsautomated"
+        }
+      }
+    },
+    {
+      "id": "bd076d09-1c26-4fec-826e-ac5e7b2b91d3",
+      "name": "Mark sent",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2880,
+        100
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "2fuXxILWb9ViQEl2",
+          "cachedResultName": "p6_messages"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "message_id",
+              "condition": "eq",
+              "keyValue": "={{ $('Decide').first().json.message_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "sent",
+            "handled_by": "={{ $('Decide').first().json.user }}",
+            "sent_body": "={{ $('Build email').first().json.text }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "handled_by",
+              "displayName": "handled_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "sent_body",
+              "displayName": "sent_body",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "a539d433-9d7d-4a01-8dbb-2d59b66515db",
+      "name": "Log outbound reply",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        3100,
+        100
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "2fuXxILWb9ViQEl2",
+          "cachedResultName": "p6_messages"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "message_id": "={{ $('Send via Gmail').first().json.id }}",
+            "thread_id": "={{ $('Decide').first().json.row.thread_id }}",
+            "direction": "outbound",
+            "from_email": "daniel@thatsautomated.com",
+            "from_name": "Daniel Parsons",
+            "subject": "={{ $('Decide').first().json.row.subject }}",
+            "body": "={{ $('Build email').first().json.text }}",
+            "received_at": "={{ $now.toISO() }}",
+            "status": "sent",
+            "handled_by": "={{ $('Decide').first().json.user }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "message_id",
+              "displayName": "message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "thread_id",
+              "displayName": "thread_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "direction",
+              "displayName": "direction",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "from_email",
+              "displayName": "from_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "from_name",
+              "displayName": "from_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "body",
+              "displayName": "body",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "received_at",
+              "displayName": "received_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "handled_by",
+              "displayName": "handled_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "235d9097-4ece-41dd-8382-ac3bc73b5ffd",
+      "name": "Resolved card",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3340,
+        400
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "\nconst a = $('Decide').first().json;\nconst row = a.row;\nlet sent = '';\ntry { sent = $('Build email').first().json.text; } catch (e) {}\nconst esc = t => String(t || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst quote = t => esc(t).split('\\n').map(l => '>' + l).join('\\n');\nconst when = new Date().toLocaleString('en-US', { timeZone: 'America/Chicago', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });\nconst outcome = {\n  approve: ':white_check_mark: Sent as drafted by <@' + a.user + '>',\n  send_edited: ':pencil2: Edited and sent by <@' + a.user + '>',\n  reassign: ':bust_in_silhouette: Routed to <@' + a.selected_user + '> by <@' + a.user + '>',\n  archive: ':file_cabinet: Archived by <@' + a.user + '>',\n}[a.action] || 'Handled';\nconst cat = { sales: 'Sales', support: 'Support', existing_client: 'Existing client', vendor: 'Vendor', spam: 'Spam', unclear: 'Unclear' }[row.category] || row.category;\nconst blocks = [\n  { type: 'section', text: { type: 'mrkdwn', text: '*' + cat + ' \u00b7 ' + Math.round(Number(row.confidence) * 100) + '%* \u00b7 ' + esc(row.from_name || row.from_email) + ' <mailto:' + row.from_email + '|' + row.from_email + '>\\n*Subject:* ' + esc(row.subject) } },\n  { type: 'section', text: { type: 'mrkdwn', text: outcome + ' \u00b7 ' + when } },\n];\nif (sent) blocks.push({ type: 'section', text: { type: 'mrkdwn', text: '*Sent*\\n' + quote(sent.slice(0, 2500)) } });\nblocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: esc(row.reason || '') + (row.trace_url ? ' \u00b7 <' + row.trace_url + '|LangSmith trace>' : '') }] });\nreturn [{ json: { channel: a.channel, ts: a.ts, text: outcome, blocks } }];\n"
+      }
+    },
+    {
+      "id": "6193505c-8889-4379-82b3-cb4e1684d622",
+      "name": "Build modal",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2220,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "\nconst d = $('Decide').first().json;\nconst row = d.row;\nconst input = { type: 'plain_text_input', action_id: 'reply_text', multiline: true };\nif (row.draft) input.initial_value = String(row.draft).slice(0, 2900);\nreturn [{ json: { trigger_id: d.trigger_id, view: {\n  type: 'modal', callback_id: 'p6_edit',\n  private_metadata: JSON.stringify({ message_id: d.message_id, channel: d.channel, ts: d.ts }),\n  title: { type: 'plain_text', text: 'Reply to sender' },\n  submit: { type: 'plain_text', text: 'Send' },\n  close: { type: 'plain_text', text: 'Cancel' },\n  blocks: [\n    { type: 'context', elements: [{ type: 'mrkdwn', text: 'To: ' + row.from_email + '\\nRe: ' + (row.subject || '') }] },\n    { type: 'input', block_id: 'reply_block', label: { type: 'plain_text', text: 'Reply' }, element: input },\n    { type: 'context', elements: [{ type: 'mrkdwn', text: 'Sends from daniel@thatsautomated.com on the same Gmail thread.' }] },\n  ],\n} } }];\n"
+      }
+    },
+    {
+      "id": "e6ce8724-9ed9-42d2-85bd-e1ac979a0d53",
+      "name": "Open edit modal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2440,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/views.open",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}"
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "id": "33756ad5-d06a-42ce-b165-851b07dd37f4",
+      "name": "Tell the assignee",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2220,
+        500
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $('Decide').first().json.channel, thread_ts: $('Decide').first().json.ts, text: '<@' + $('Decide').first().json.selected_user + '> this one is yours (assigned by <@' + $('Decide').first().json.user + '>). Reply to ' + $('Decide').first().json.row.from_email + ' from Gmail; the thread is labeled Support Triage/Routed.' }) }}"
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "id": "dc7a6a5e-7381-42d5-b138-6dac993c27d7",
+      "name": "Label Routed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2440,
+        500
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://gmail.googleapis.com/gmail/v1/users/me/threads/{{ $('Decide').first().json.row.thread_id }}/modify",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "gmailOAuth2",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ addLabelIds: [\"Label_7\"], removeLabelIds: [] }) }}"
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail thatsautomated"
+        }
+      }
+    },
+    {
+      "id": "43155ff3-1a8e-4486-83d1-e5979b88d15f",
+      "name": "Mark routed",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2660,
+        500
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "2fuXxILWb9ViQEl2",
+          "cachedResultName": "p6_messages"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "message_id",
+              "condition": "eq",
+              "keyValue": "={{ $('Decide').first().json.message_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "routed",
+            "handled_by": "={{ $('Decide').first().json.selected_user }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "handled_by",
+              "displayName": "handled_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1b962c94-a43e-47be-a464-7a23e83d211e",
+      "name": "Label Archived",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2220,
+        700
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://gmail.googleapis.com/gmail/v1/users/me/threads/{{ $('Decide').first().json.row.thread_id }}/modify",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "gmailOAuth2",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ addLabelIds: [\"Label_5\"], removeLabelIds: [\"INBOX\", \"UNREAD\"] }) }}"
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail thatsautomated"
+        }
+      }
+    },
+    {
+      "id": "c8aff4f5-897d-4f5b-8b42-c4d2de67f6f2",
+      "name": "Mark archived",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2440,
+        700
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "2fuXxILWb9ViQEl2",
+          "cachedResultName": "p6_messages"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "message_id",
+              "condition": "eq",
+              "keyValue": "={{ $('Decide').first().json.message_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "archived",
+            "handled_by": "={{ $('Decide').first().json.user }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "handled_by",
+              "displayName": "handled_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "4224802a-60d0-4b35-9305-a7b7f4332c8c",
+      "name": "Tell clicker it's done",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2220,
+        900
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postEphemeral",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $json.channel, user: $json.user, text: 'Already handled (' + $json.row.status + '). Nothing else was sent.' }) }}"
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "id": "ec27348e-833e-4b58-bcd3-ef5af6cc234b",
+      "name": "Update card",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        3560,
+        400
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.update",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}"
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Slack action": {
+      "main": [
+        [
+          {
+            "node": "Ack within 3s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ack within 3s": {
+      "main": [
+        [
+          {
+            "node": "Read raw body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read raw body": {
+      "main": [
+        [
+          {
+            "node": "Verify Slack signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Slack signature": {
+      "main": [
+        [
+          {
+            "node": "Signed by Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Signed by Slack": {
+      "main": [
+        [
+          {
+            "node": "Parse action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse action": {
+      "main": [
+        [
+          {
+            "node": "Ours",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ours": {
+      "main": [
+        [
+          {
+            "node": "Get message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get message": {
+      "main": [
+        [
+          {
+            "node": "Decide",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decide": {
+      "main": [
+        [
+          {
+            "node": "Which action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Which action": {
+      "main": [
+        [
+          {
+            "node": "Build email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build modal",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Tell the assignee",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Label Archived",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Tell clicker it's done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build email": {
+      "main": [
+        [
+          {
+            "node": "Send via Gmail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send via Gmail": {
+      "main": [
+        [
+          {
+            "node": "Label Replied",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Label Replied": {
+      "main": [
+        [
+          {
+            "node": "Mark sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark sent": {
+      "main": [
+        [
+          {
+            "node": "Log outbound reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log outbound reply": {
+      "main": [
+        [
+          {
+            "node": "Resolved card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolved card": {
+      "main": [
+        [
+          {
+            "node": "Update card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build modal": {
+      "main": [
+        [
+          {
+            "node": "Open edit modal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tell the assignee": {
+      "main": [
+        [
+          {
+            "node": "Label Routed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Label Routed": {
+      "main": [
+        [
+          {
+            "node": "Mark routed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark routed": {
+      "main": [
+        [
+          {
+            "node": "Resolved card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Label Archived": {
+      "main": [
+        [
+          {
+            "node": "Mark archived",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark archived": {
+      "main": [
+        [
+          {
+            "node": "Resolved card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  }
+}

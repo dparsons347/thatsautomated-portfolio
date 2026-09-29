@@ -1,0 +1,21 @@
+name: p6-triage
+
+# Runs next to the n8n stack on the VPS. No public route: n8n reaches it over the
+# shared Docker network at http://triage-api:8000, so there is no DNS record or
+# Traefik router for it. Secrets live in deploy/.env (see ../.env.example).
+services:
+  triage-api:
+    build: ..
+    restart: unless-stopped
+    env_file: .env
+    networks: [n8n]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+networks:
+  n8n:
+    external: true
+    name: ${N8N_NETWORK:-root_default}

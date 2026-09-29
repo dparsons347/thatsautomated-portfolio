@@ -1,0 +1,758 @@
+{
+  "name": "P6: Triage message",
+  "nodes": [
+    {
+      "id": "5c5489a1-7ba4-4692-9c9f-9433c3b6e727",
+      "name": "When called",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "message_id",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "c44a77d3-a4ad-4b65-a404-73bbc94e5909",
+      "name": "Settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": true,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "s1",
+              "name": "threshold",
+              "value": 0.75,
+              "type": "number"
+            },
+            {
+              "id": "s2",
+              "name": "triage_channel",
+              "value": "C0C68M157CG",
+              "type": "string"
+            },
+            {
+              "id": "s3",
+              "name": "alerts_channel",
+              "value": "C0C22TS5WRE",
+              "type": "string"
+            },
+            {
+              "id": "s4",
+              "name": "service_url",
+              "value": "http://triage-api:8000",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "abd6b2f2-e8e5-4be8-8569-4bd72a933086",
+      "name": "Get message",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "2fuXxILWb9ViQEl2",
+          "cachedResultName": "p6_messages"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "message_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.message_id }}"
+            }
+          ]
+        },
+        "limit": 1
+      }
+    },
+    {
+      "id": "7b87a359-e9fd-4603-b349-956ded4c631c",
+      "name": "Get thread",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "2fuXxILWb9ViQEl2",
+          "cachedResultName": "p6_messages"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "thread_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.thread_id }}"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "7f3253d0-f6fb-4af4-885d-a9900046e9a6",
+      "name": "Build request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "\nconst s = $('Settings').first().json;\nconst row = $('Get message').first().json;\nconst all = $input.all().map(i => i.json);\nconst others = all.filter(r => r.message_id !== row.message_id && String(r.received_at || '') <= String(row.received_at || '9999'));\nothers.sort((a, b) => String(a.received_at).localeCompare(String(b.received_at)));\nconst history = others.slice(-8).map(r => ({\n  from_email: r.from_email || '', body: String(r.body || '').slice(0, 1500),\n  category: r.direction === 'outbound' ? null : (r.category || null),\n  direction: r.direction === 'outbound' ? 'outbound' : 'inbound',\n}));\nconst priorIn = others.filter(r => r.direction !== 'outbound' && r.category).pop();\nreturn [{ json: { request: {\n  message_id: row.message_id, thread_id: row.thread_id, from_email: row.from_email, from_name: row.from_name || '',\n  subject: row.subject || '', body: row.body || '(empty body)', thread_history: history,\n  prior_category: priorIn ? priorIn.category : null, threshold: Number(s.threshold),\n} } }];\n"
+      }
+    },
+    {
+      "id": "d6e3fcfa-87ba-44a8-9f25-a836a1b6c651",
+      "name": "Call triage service",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1100,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Settings').first().json.service_url }}/triage",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.request) }}",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "P2 webhook key"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "1d143390-30da-4546-b092-970a3e02d7fa",
+      "name": "Build card",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "\nconst s = $('Settings').first().json;\nconst row = $('Get message').first().json;\nconst r = $input.first().json;\nconst trunc = (t, n) => { t = t || ''; return t.length > n ? t.slice(0, n - 1) + '\u2026' : t; };\nconst esc = t => String(t || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst quote = t => esc(t).split('\\n').map(l => '>' + l).join('\\n');\nconst catLabel = { sales: 'Sales', support: 'Support', existing_client: 'Existing client', vendor: 'Vendor', spam: 'Spam', unclear: 'Unclear' }[r.category] || r.category;\nconst catEmoji = { sales: ':moneybag:', support: ':wrench:', existing_client: ':handshake:', vendor: ':package:', spam: ':no_entry_sign:', unclear: ':grey_question:' }[r.category] || ':email:';\nconst routeLabel = { draft: ':white_check_mark: Draft ready for review', person: ':raising_hand: Needs a person', archive: ':file_cabinet: Suggest archive' }[r.route] || r.route;\n\nlet cust;\nif (r.lookup_error) {\n  cust = ':warning: HubSpot lookup failed (' + esc(r.lookup_error) + '). Treated as a new sender.';\n} else if (r.customer) {\n  const c = r.customer;\n  const deals = (c.deals || []).slice(0, 3).map(d => esc(d.name) + ' (' + esc(d.stage) + (d.amount ? ', $' + Number(d.amount).toLocaleString('en-US') : '') + ')').join(' \u00b7 ');\n  cust = '*' + esc(c.name || c.email) + '*' + (c.company ? ', ' + esc(c.company) : '') + ' \u00b7 ' + esc(c.lifecycle_stage || 'contact')\n    + (deals ? '\\n' + deals : '\\nNo deals') + (c.url ? '\\n<' + c.url + '|Open in HubSpot>' : '');\n} else {\n  cust = 'Not in HubSpot (new sender)';\n}\n\nconst blockId = 'p6|' + row.message_id;\nconst btn = (id, text, style) => { const b = { type: 'button', action_id: id, text: { type: 'plain_text', text }, value: row.message_id }; if (style) b.style = style; return b; };\nconst reassign = { type: 'users_select', action_id: 'reassign', placeholder: { type: 'plain_text', text: 'Reassign to\u2026' } };\nlet actions;\nif (r.route === 'draft') actions = [btn('approve', 'Approve and send', 'primary'), btn('edit', 'Edit'), reassign, btn('archive', 'Archive')];\nelse if (r.route === 'archive') actions = [btn('archive', 'Archive', 'primary'), btn('edit', 'Write reply'), reassign];\nelse actions = [btn('edit', r.draft ? 'Edit and send' : 'Write reply', 'primary'), reassign, btn('archive', 'Archive')];\n\nconst blocks = [\n  { type: 'header', text: { type: 'plain_text', emoji: true, text: trunc(catEmoji + ' ' + catLabel + ' \u00b7 ' + Math.round(r.confidence * 100) + '% \u00b7 ' + (row.from_name || row.from_email), 150) } },\n  { type: 'section', text: { type: 'mrkdwn', text: '*From:* ' + esc(row.from_name) + ' <mailto:' + row.from_email + '|' + row.from_email + '>\\n*Subject:* ' + esc(row.subject)\n      + (r.is_reply ? '\\n:repeat: Reply on an open thread' : '') } },\n  { type: 'section', fields: [ { type: 'mrkdwn', text: '*Route*\\n' + routeLabel }, { type: 'mrkdwn', text: '*Why this category*\\n' + esc(trunc(r.reason, 280)) } ] },\n];\nif ((r.gate_reasons || []).length) blocks.push({ type: 'section', text: { type: 'mrkdwn', text: '*Sent to a person because*\\n' + r.gate_reasons.map(g => '\u2022 ' + esc(g)).join('\\n') } });\nblocks.push({ type: 'section', text: { type: 'mrkdwn', text: '*Customer*\\n' + cust } });\nblocks.push({ type: 'section', text: { type: 'mrkdwn', text: '*Message*\\n' + quote(trunc(row.body, 900)) } });\nif (r.draft) blocks.push({ type: 'section', text: { type: 'mrkdwn', text: '*Draft reply*\\n' + quote(trunc(r.draft, 2500)) } });\nblocks.push({ type: 'actions', block_id: blockId, elements: actions });\nblocks.push({ type: 'context', elements: [ { type: 'mrkdwn', text: 'Threshold ' + r.threshold + ' \u00b7 ' + (r.trace_url ? '<' + r.trace_url + '|LangSmith trace>' : 'tracing off') + ' \u00b7 nothing is sent without a click' } ] });\n\nreturn [{ json: {\n  recovered: row.status === 'queued', attempts: Number(row.attempts) || 0,\n  row: {\n    message_id: row.message_id, status: 'awaiting_review', last_error: '',\n    category: r.category, confidence: r.confidence, reason: r.reason, route: r.route,\n    needs_human: r.needs_human, gate_reasons: (r.gate_reasons || []).join('\\n'), draft: r.draft || '',\n    customer_json: r.customer ? JSON.stringify(r.customer) : (r.lookup_error ? JSON.stringify({ lookup_error: r.lookup_error }) : ''),\n    trace_url: r.trace_url || '',\n  },\n  slack: { channel: s.triage_channel, text: catLabel + ': ' + (row.subject || '(no subject)'), unfurl_links: false, unfurl_media: false, blocks },\n} }];\n"
+      }
+    },
+    {
+      "id": "6cf4d52b-157b-45ec-b7a6-97b1a6d7f957",
+      "name": "Post to #support-triage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1560,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.slack) }}"
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "eb80a8ca-b70b-4a27-a707-679772cd2ad2",
+      "name": "Check Slack post",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "\nif (!$json.ok) throw new Error('Slack chat.postMessage failed: ' + $json.error);\nconst card = $('Build card').first().json;\nreturn [{ json: { ...card.row, slack_ts: $json.ts, slack_channel: $json.channel, recovered: card.recovered, attempts: card.attempts } }];\n"
+      }
+    },
+    {
+      "id": "28a6313a-ac49-4c57-b6ca-4139065ccfca",
+      "name": "Save result",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2000,
+        200
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "2fuXxILWb9ViQEl2",
+          "cachedResultName": "p6_messages"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "message_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.message_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "={{ $json.status }}",
+            "last_error": "={{ $json.last_error }}",
+            "category": "={{ $json.category }}",
+            "confidence": "={{ $json.confidence }}",
+            "reason": "={{ $json.reason }}",
+            "route": "={{ $json.route }}",
+            "needs_human": "={{ $json.needs_human }}",
+            "gate_reasons": "={{ $json.gate_reasons }}",
+            "draft": "={{ $json.draft }}",
+            "customer_json": "={{ $json.customer_json }}",
+            "trace_url": "={{ $json.trace_url }}",
+            "slack_channel": "={{ $json.slack_channel }}",
+            "slack_ts": "={{ $json.slack_ts }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "last_error",
+              "displayName": "last_error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "category",
+              "displayName": "category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "confidence",
+              "displayName": "confidence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "reason",
+              "displayName": "reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "route",
+              "displayName": "route",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "needs_human",
+              "displayName": "needs_human",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "gate_reasons",
+              "displayName": "gate_reasons",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "draft",
+              "displayName": "draft",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "customer_json",
+              "displayName": "customer_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "trace_url",
+              "displayName": "trace_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "slack_channel",
+              "displayName": "slack_channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "slack_ts",
+              "displayName": "slack_ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "a090b8b2-3431-45a4-b7ac-729dff20676a",
+      "name": "Was it queued?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2220,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $('Check Slack post').item.json.recovered }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "e9951c96-aa69-45c1-b5c5-4bf079438acb",
+      "name": "Alert: recovered",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2440,
+        120
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $('Settings').first().json.alerts_channel, text: ':white_check_mark: Support triage is back. The queued message from ' + $('Get message').first().json.from_email + ' (' + $('Get message').first().json.subject + ') was classified after ' + $('Check Slack post').item.json.attempts + ' failed attempt(s) and is in #support-triage.' }) }}"
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "id": "d448a61e-3d0f-4b1b-9216-47e9b684d1c8",
+      "name": "Queue for retry",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        440
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "\nconst row = $('Get message').first().json;\nconst e = $json.error || $json;\nlet msg = typeof e === 'string' ? e : [e.message, e.description].filter(Boolean).join(' ');\nmsg = (msg || 'unknown error').slice(0, 400);\nconst attempts = (Number(row.attempts) || 0) + 1;\nconst failed = attempts >= 7;\nreturn [{ json: { message_id: row.message_id, attempts, status: failed ? 'failed' : 'queued', last_error: msg,\n  notify: attempts === 1 || failed, failed, subject: row.subject || '', from: row.from_email } }];\n"
+      }
+    },
+    {
+      "id": "da6a041c-1891-4fff-8b9b-ea0bbe46d01f",
+      "name": "Save queued",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1560,
+        440
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "2fuXxILWb9ViQEl2",
+          "cachedResultName": "p6_messages"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "message_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.message_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "={{ $json.status }}",
+            "attempts": "={{ $json.attempts }}",
+            "last_error": "={{ $json.last_error }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "attempts",
+              "displayName": "attempts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "last_error",
+              "displayName": "last_error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "c4da72b2-9f8b-48a9-8740-da5fa410281c",
+      "name": "First failure or gave up?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1780,
+        440
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $('Queue for retry').item.json.notify }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "b8d69db8-21c5-4586-aa48-e78633fca7c2",
+      "name": "Alert #automation-alerts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2000,
+        380
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $('Settings').first().json.alerts_channel, text: ($('Queue for retry').item.json.failed ? ':rotating_light: *Support triage gave up after 7 attempts.* This message needs a person; nothing was sent.' : ':warning: *Support triage could not classify a message.* It is queued and retries every 10 minutes for an hour. Nothing was sent.') + '\\nFrom: ' + $('Queue for retry').item.json.from + '\\nSubject: ' + $('Queue for retry').item.json.subject + '\\nError: `' + $('Queue for retry').item.json.last_error + '`' }) }}"
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "When called": {
+      "main": [
+        [
+          {
+            "node": "Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Settings": {
+      "main": [
+        [
+          {
+            "node": "Get message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get message": {
+      "main": [
+        [
+          {
+            "node": "Get thread",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get thread": {
+      "main": [
+        [
+          {
+            "node": "Build request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build request": {
+      "main": [
+        [
+          {
+            "node": "Call triage service",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call triage service": {
+      "main": [
+        [
+          {
+            "node": "Build card",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Queue for retry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build card": {
+      "main": [
+        [
+          {
+            "node": "Post to #support-triage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post to #support-triage": {
+      "main": [
+        [
+          {
+            "node": "Check Slack post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Slack post": {
+      "main": [
+        [
+          {
+            "node": "Save result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save result": {
+      "main": [
+        [
+          {
+            "node": "Was it queued?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Was it queued?": {
+      "main": [
+        [
+          {
+            "node": "Alert: recovered",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Queue for retry": {
+      "main": [
+        [
+          {
+            "node": "Save queued",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save queued": {
+      "main": [
+        [
+          {
+            "node": "First failure or gave up?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "First failure or gave up?": {
+      "main": [
+        [
+          {
+            "node": "Alert #automation-alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}

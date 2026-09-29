@@ -1,0 +1,138 @@
+{
+  "name": "P6: Seed test emails",
+  "nodes": [
+    {
+      "id": "eae896df-98aa-4b98-aa25-66981867367d",
+      "name": "Seed",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "p6-seed",
+        "authentication": "headerAuth",
+        "responseMode": "lastNode",
+        "responseData": "allEntries"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "P2 webhook key"
+        }
+      }
+    },
+    {
+      "id": "f040cb14-c09e-41ea-8583-09f4266dc8da",
+      "name": "Existing messages",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "2fuXxILWb9ViQEl2",
+          "cachedResultName": "p6_messages"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "direction",
+              "condition": "eq",
+              "keyValue": "inbound"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "id": "26fceb85-f7dc-4da9-adf4-1392136b8a5a",
+      "name": "Build test emails",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const EMAILS = [\n{\n\"key\": \"sales_new\",\n\"loom\": true,\n\"from_email\": \"daniel+maya@thatsautomated.com\",\n\"from_name\": \"Maya Brooks\",\n\"subject\": \"Automating our lead entry\",\n\"body\": \"Hi, I run a 6 person landscaping company. Leads come in from our website form and from Facebook, and right now my office manager copies them into Jobber and then into QuickBooks by hand. Is that something you can automate? Roughly what does a project like that cost?\\n\\nMaya Brooks\\nBrooks Outdoor Co.\"\n},\n{\n\"key\": \"support_login\",\n\"loom\": true,\n\"from_email\": \"daniel+priya@thatsautomated.com\",\n\"from_name\": \"Priya Raman\",\n\"subject\": \"Reminder texts stopped\",\n\"body\": \"Hi Daniel, the appointment reminder workflow didn't send anything this morning. There's a message in our Slack alerts channel saying the Google connection expired. What do I need to do?\\n\\nPriya\\nRaman Family Dental\"\n},\n{\n\"key\": \"existing_client\",\n\"loom\": true,\n\"from_email\": \"daniel+marcus@thatsautomated.com\",\n\"from_name\": \"Marcus Webb\",\n\"subject\": \"September invoice and the Opelika office\",\n\"body\": \"Daniel, the September invoice came in about $400 over what I expected. Can you walk me through it? Also we're opening a second office in Opelika next month and I want the estimate workflow to cover it. Let's talk scope.\\n\\nMarcus\\nWebb Roofing\"\n},\n{\n\"key\": \"vendor_pitch\",\n\"loom\": true,\n\"from_email\": \"daniel+growthlane@thatsautomated.com\",\n\"from_name\": \"Tyler at GrowthLane\",\n\"subject\": \"Guest post collaboration for thatsautomated.com\",\n\"body\": \"Hi there, I'm Tyler from GrowthLane. We place high authority guest posts and backlinks for agencies like yours. We could get That's Automated featured on 10 DA50+ sites this month. Open to a quick chat about pricing?\\n\\nTyler\"\n},\n{\n\"key\": \"ambiguous\",\n\"loom\": true,\n\"from_email\": \"daniel+sam@thatsautomated.com\",\n\"from_name\": \"Sam\",\n\"subject\": \"Following up\",\n\"body\": \"Hey, just circling back on what we talked about the other day. Let me know.\\n\\nSam\"\n},\n{\n\"key\": \"angry_reply\",\n\"loom\": false,\n\"from_email\": \"daniel+maya@thatsautomated.com\",\n\"from_name\": \"Maya Brooks\",\n\"subject\": \"Re: Automating our lead entry\",\n\"body\": \"I booked the call for 10am today and nobody showed up. I waited 20 minutes. Honestly not a great first impression. Is anyone actually there?\\n\\nMaya\",\n\"reply_to\": \"sales_new\"\n},\n{\n\"key\": \"spam\",\n\"loom\": false,\n\"from_email\": \"daniel+mailadmin@thatsautomated.com\",\n\"from_name\": \"Mailbox Admin\",\n\"subject\": \"ACTION REQUIRED: mailbox storage full\",\n\"body\": \"Your mailbox has exceeded its storage limit. Incoming messages will be deleted in 24 hours. Verify your password here to restore service: http://mail-verify-portal.example/login\"\n},\n{\n\"key\": \"lead_seller\",\n\"loom\": false,\n\"from_email\": \"daniel+brightpath@thatsautomated.com\",\n\"from_name\": \"Anita Shah\",\n\"subject\": \"Interested in automation for our clients\",\n\"body\": \"Hello, we are a lead generation company working with home service businesses. Several of our clients need CRM automation and we are looking for an automation partner. Could you tell me your rates and availability? We can also supply you with 10 to 15 qualified leads a month.\\n\\nAnita Shah\\nBrightPath Leads\"\n},\n{\n\"key\": \"support_not_covered\",\n\"loom\": false,\n\"from_email\": \"daniel+priya@thatsautomated.com\",\n\"from_name\": \"Priya Raman\",\n\"subject\": \"Exporting last month's reminders\",\n\"body\": \"Quick one: can I export a list of every reminder text that went out last month? Our office manager wants it as a spreadsheet for an audit.\\n\\nPriya\"\n},\n{\n\"key\": \"support_hours\",\n\"loom\": false,\n\"from_email\": \"daniel+priya@thatsautomated.com\",\n\"from_name\": \"Priya Raman\",\n\"subject\": \"Saturday coverage?\",\n\"body\": \"Are you around on Saturdays if something breaks? We're open half days on Saturday and I want to know who to call.\\n\\nPriya\"\n}\n];\n\nconst req = $('Seed').first().json.body || {};\nconst keys = Array.isArray(req.keys) ? req.keys\n  : (req.set === 'all' ? EMAILS.map(e => e.key) : EMAILS.filter(e => e.loom).map(e => e.key));\nconst rows = $input.all().map(i => i.json).filter(r => r.message_id);\nconst b64 = s => Buffer.from(s, 'utf8').toString('base64');\nconst out = [];\nfor (const k of keys) {\n  const e = EMAILS.find(x => x.key === k);\n  if (!e) throw new Error('Unknown test email: ' + k);\n  let parentId = '';\n  if (e.reply_to) {\n    const parent = EMAILS.find(x => x.key === e.reply_to);\n    const prow = rows.filter(r => r.direction !== 'outbound' && r.from_email === parent.from_email && r.subject === parent.subject).pop();\n    if (!prow) throw new Error('Send \"' + e.reply_to + '\" first: \"' + k + '\" is a reply on that thread');\n    parentId = prow.rfc_message_id;\n  }\n  const headers = [\n    'From: \"' + e.from_name + '\" <' + e.from_email + '>',\n    'To: daniel+support@thatsautomated.com',\n    'Subject: =?UTF-8?B?' + b64(e.subject) + '?=',\n    'Date: ' + new Date().toUTCString(),\n    'Message-ID: <p6-' + k + '-' + Date.now() + '-' + out.length + '@thatsautomated.test>',\n    parentId ? 'In-Reply-To: ' + parentId : '',\n    parentId ? 'References: ' + parentId : '',\n    'MIME-Version: 1.0',\n    'Content-Type: text/plain; charset=UTF-8',\n    'Content-Transfer-Encoding: base64',\n  ].filter(Boolean);\n  const mime = headers.join('\\r\\n') + '\\r\\n\\r\\n' + b64(e.body.replace(/\\r?\\n/g, '\\r\\n')).replace(/(.{76})/g, '$1\\r\\n');\n  // Gmail's import call threads a reply by its In-Reply-To/References headers and the Re: subject.\n  const body = { raw: b64(mime).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, ''), labelIds: ['INBOX', 'UNREAD', 'Label_4'] };\n  out.push({ json: { key: k, request: body } });\n}\nreturn out;\n"
+      }
+    },
+    {
+      "id": "606db361-42ba-4157-84c1-a3654aa213e2",
+      "name": "Import into Gmail",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://gmail.googleapis.com/gmail/v1/users/me/messages/import?internalDateSource=dateHeader&neverMarkSpam=true",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "gmailOAuth2",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.request) }}"
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail thatsautomated"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Seed": {
+      "main": [
+        [
+          {
+            "node": "Existing messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Existing messages": {
+      "main": [
+        [
+          {
+            "node": "Build test emails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build test emails": {
+      "main": [
+        [
+          {
+            "node": "Import into Gmail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  }
+}

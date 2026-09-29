@@ -8,3 +8,4 @@ __pycache__/
 .venv/
 *.pbix.bak
 qbo_tokens.json
+.pytest_cache/

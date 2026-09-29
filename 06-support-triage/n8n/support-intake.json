@@ -1,0 +1,364 @@
+{
+  "name": "P6: Support intake",
+  "nodes": [
+    {
+      "id": "41c92dc6-48da-4eaf-85e0-933f9a02c962",
+      "name": "Support Triage label",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "maxResults": 10,
+        "filters": {
+          "labelIds": [
+            "Label_4"
+          ],
+          "readStatus": "both"
+        },
+        "options": {}
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail thatsautomated"
+        }
+      }
+    },
+    {
+      "id": "06a53cf6-18c7-4ebc-abed-fe9a2b6d2e20",
+      "name": "Normalize",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "\nconst m = $json;\nconst fromV = (m.from && m.from.value && m.from.value[0]) || {};\nconst from_email = String(fromV.address || '').toLowerCase();\n// Keep only the new text: drop quoted lines and everything after an \"On ... wrote:\" marker.\nconst lines = String(m.text || '').replace(/\\r/g, '').split('\\n');\nconst out = [];\nfor (let i = 0; i < lines.length; i++) {\n  const l = lines[i].trim();\n  const joined = (l + ' ' + ((lines[i + 1] || '').trim())).trim();\n  if ((/^On .*wrote:$/.test(l)) || (/^On /.test(l) && /wrote:$/.test(joined)) || /^-{2,}\\s*Original Message/i.test(l)) break;\n  if (l.startsWith('>')) continue;\n  out.push(lines[i]);\n}\nlet refs = m.references;\nif (Array.isArray(refs)) refs = refs.join(' ');\nreturn { json: {\n  message_id: m.id, thread_id: m.threadId, rfc_message_id: m.messageId || '', references_hdr: refs || '',\n  from_email, from_name: fromV.name || '', subject: m.subject || '',\n  body: out.join('\\n').trim().slice(0, 6000),\n  received_at: m.date ? new Date(m.date).toISOString() : new Date().toISOString(),\n  is_self: from_email === 'daniel@thatsautomated.com',\n} };\n"
+      }
+    },
+    {
+      "id": "886f5f7b-56df-4d9f-a435-7229d0bdcdce",
+      "name": "Skip our own mail",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.is_self }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "8571e882-8575-4748-a509-840a69440b24",
+      "name": "Not seen before",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "rowNotExists",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "2fuXxILWb9ViQEl2",
+          "cachedResultName": "p6_messages"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "message_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.message_id }}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "5d525614-04a9-4535-954d-93a454a97c23",
+      "name": "Save message",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        300
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "2fuXxILWb9ViQEl2",
+          "cachedResultName": "p6_messages"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "message_id": "={{ $json.message_id }}",
+            "thread_id": "={{ $json.thread_id }}",
+            "rfc_message_id": "={{ $json.rfc_message_id }}",
+            "references_hdr": "={{ $json.references_hdr }}",
+            "from_email": "={{ $json.from_email }}",
+            "from_name": "={{ $json.from_name }}",
+            "subject": "={{ $json.subject }}",
+            "body": "={{ $json.body }}",
+            "received_at": "={{ $json.received_at }}",
+            "direction": "inbound",
+            "status": "new",
+            "attempts": 0
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "message_id",
+              "displayName": "message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "thread_id",
+              "displayName": "thread_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "rfc_message_id",
+              "displayName": "rfc_message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "references_hdr",
+              "displayName": "references_hdr",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "from_email",
+              "displayName": "from_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "from_name",
+              "displayName": "from_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "body",
+              "displayName": "body",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "received_at",
+              "displayName": "received_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "direction",
+              "displayName": "direction",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "attempts",
+              "displayName": "attempts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "b9ec0686-d38d-468b-92ad-b1c700a4758b",
+      "name": "Triage message",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1100,
+        300
+      ],
+      "parameters": {
+        "mode": "each",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "PS1OG3ghcuV8M2Ye",
+          "cachedResultName": "P6: Triage message"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "message_id": "={{ $json.message_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "message_id",
+              "displayName": "message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Support Triage label": {
+      "main": [
+        [
+          {
+            "node": "Normalize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize": {
+      "main": [
+        [
+          {
+            "node": "Skip our own mail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip our own mail": {
+      "main": [
+        [
+          {
+            "node": "Not seen before",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Not seen before": {
+      "main": [
+        [
+          {
+            "node": "Save message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save message": {
+      "main": [
+        [
+          {
+            "node": "Triage message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  }
+}

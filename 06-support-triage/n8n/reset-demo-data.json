@@ -1,0 +1,290 @@
+{
+  "name": "P6: Reset demo data",
+  "nodes": [
+    {
+      "id": "b2af0b14-0600-46df-82fb-339ffba199b6",
+      "name": "Reset",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        400
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "p6-reset",
+        "authentication": "headerAuth",
+        "responseMode": "onReceived"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "P2 webhook key"
+        }
+      }
+    },
+    {
+      "id": "c678f80b-cae4-422b-b6aa-9202f2ce7fe8",
+      "name": "Clear p6_messages",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        200
+      ],
+      "parameters": {
+        "resource": "table",
+        "operation": "clear",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "2fuXxILWb9ViQEl2",
+          "cachedResultName": "p6_messages"
+        }
+      }
+    },
+    {
+      "id": "3087d514-18d3-490e-8425-da8d033c2a89",
+      "name": "Find Gmail threads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        240,
+        400
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://gmail.googleapis.com/gmail/v1/users/me/threads?q=label%3Asupport-triage&maxResults=100",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "gmailOAuth2"
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail thatsautomated"
+        }
+      }
+    },
+    {
+      "id": "931897b5-839a-449d-9e22-03f2f618a4b7",
+      "name": "One item per thread",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        400
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "\nconst threads = ($input.first().json.threads || []);\nreturn threads.map(t => ({ json: { id: t.id } }));\n"
+      }
+    },
+    {
+      "id": "8561af73-188b-4454-8d88-7652feba30cb",
+      "name": "Trash thread",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        680,
+        400
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://gmail.googleapis.com/gmail/v1/users/me/threads/{{ $json.id }}/trash",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "gmailOAuth2"
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail thatsautomated"
+        }
+      }
+    },
+    {
+      "id": "e7a05bea-dd38-4414-9909-0455e3b30e45",
+      "name": "Channel history",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        240,
+        620
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://slack.com/api/conversations.history?channel=C0C68M157CG&limit=200",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi"
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "id": "22dab081-b81d-41a5-b2b9-3ff233acc695",
+      "name": "Bot messages",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        620
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "\nconst msgs = ($input.first().json.messages || []);\nreturn msgs.filter(m => m.bot_id === 'B0C16E9LRU6').map(m => ({ json: { ts: m.ts } }));\n"
+      }
+    },
+    {
+      "id": "4179261f-1947-4e28-aef2-85ee06609047",
+      "name": "Thread replies",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        680,
+        620
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://slack.com/api/conversations.replies?channel=C0C68M157CG&ts={{ $json.ts }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi"
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "id": "bc35a851-e3d4-46da-aa8d-618d60d9b6f1",
+      "name": "Everything the bot posted",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        620
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "\nconst seen = new Set();\nconst out = [];\nfor (const item of $input.all()) {\n  for (const m of (item.json.messages || [])) {\n    if (m.bot_id === 'B0C16E9LRU6' && !seen.has(m.ts)) { seen.add(m.ts); out.push({ json: { ts: m.ts } }); }\n  }\n}\n// replies first, parents last, so no \"message deleted\" placeholders are left behind\nout.sort((a, b) => Number(b.json.ts) - Number(a.json.ts));\nreturn out;\n"
+      }
+    },
+    {
+      "id": "4f0600c2-90aa-4ffb-9695-31f83bfb797e",
+      "name": "Delete Slack message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1120,
+        620
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.delete",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: 'C0C68M157CG', ts: $json.ts }) }}"
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Reset": {
+      "main": [
+        [
+          {
+            "node": "Clear p6_messages",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Find Gmail threads",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Channel history",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Gmail threads": {
+      "main": [
+        [
+          {
+            "node": "One item per thread",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "One item per thread": {
+      "main": [
+        [
+          {
+            "node": "Trash thread",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Channel history": {
+      "main": [
+        [
+          {
+            "node": "Bot messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bot messages": {
+      "main": [
+        [
+          {
+            "node": "Thread replies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Thread replies": {
+      "main": [
+        [
+          {
+            "node": "Everything the bot posted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Everything the bot posted": {
+      "main": [
+        [
+          {
+            "node": "Delete Slack message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  }
+}
