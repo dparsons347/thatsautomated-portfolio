@@ -1,0 +1,5 @@
+Handle,Title,Body (HTML),Vendor,Type,Tags,Published,Option1 Name,Option1 Value,Variant SKU,Variant Grams,Variant Inventory Tracker,Variant Inventory Qty,Variant Inventory Policy,Variant Fulfillment Service,Variant Price,Variant Requires Shipping,Variant Taxable,Status
+cedar-smoke-candle-8oz,"Cedar & Smoke Candle, 8 oz","<p>Soy wax, cotton wick, about 45 hours.</p>",Loblolly Candle Co,Candle,demo,TRUE,Title,Default Title,CNDL-CEDAR-8,340,,,continue,manual,24.00,TRUE,TRUE,active
+magnolia-fig-candle-8oz,"Magnolia & Fig Candle, 8 oz","<p>Soy wax, cotton wick, about 45 hours.</p>",Loblolly Candle Co,Candle,demo,TRUE,Title,Default Title,CNDL-MAGFIG-8,340,,,continue,manual,24.00,TRUE,TRUE,active
+loblolly-pine-candle-16oz,"Loblolly Pine Candle, 16 oz","<p>Two wicks, about 80 hours.</p>",Loblolly Candle Co,Candle,demo,TRUE,Title,Default Title,CNDL-PINE-16,680,,,continue,manual,38.00,TRUE,TRUE,active
+campfire-tin-4oz,"Campfire Travel Tin, 4 oz","<p>Soy wax in a screw-top tin, about 20 hours.</p>",Loblolly Candle Co,Candle,demo,TRUE,Title,Default Title,CNDL-CAMP-4,170,,,continue,manual,12.00,TRUE,TRUE,active

@@ -1,0 +1,5 @@
+Handle,Title,Body (HTML),Vendor,Type,Tags,Published,Option1 Name,Option1 Value,Variant SKU,Variant Grams,Variant Inventory Tracker,Variant Inventory Qty,Variant Inventory Policy,Variant Fulfillment Service,Variant Price,Variant Requires Shipping,Variant Taxable,Status
+reed-diffuser-cedar-smoke,"Reed Diffuser, Cedar & Smoke",<p>100 ml with eight rattan reeds.</p>,Loblolly Home,Home fragrance,demo,TRUE,Title,Default Title,HOME-DIFF-CEDAR,400,,,continue,manual,32.00,TRUE,TRUE,active
+safety-matches-jar,"Safety Matches, Jar of 50",<p>Long-stem matches in a glass jar with a striker lid.</p>,Loblolly Home,Accessory,demo,TRUE,Title,Default Title,HOME-MATCH-50,250,,,continue,manual,9.00,TRUE,TRUE,active
+wick-trimmer,Wick Trimmer,<p>Brushed steel.</p>,Loblolly Home,Accessory,demo,TRUE,Title,Default Title,HOME-TRIM,120,,,continue,manual,18.00,TRUE,TRUE,active
+stoneware-candle-tray,Stoneware Candle Tray,"<p>Hand-glazed, 6 inch.</p>",Loblolly Home,Accessory,demo,TRUE,Title,Default Title,HOME-TRAY,450,,,continue,manual,22.00,TRUE,TRUE,active
