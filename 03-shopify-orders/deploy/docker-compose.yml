@@ -1,0 +1,47 @@
+# Runs next to the existing n8n stack on the VPS and reuses its Traefik for TLS.
+# Check the Traefik network and cert resolver names with:
+#   docker network ls        (the n8n template's network is usually root_default)
+#   docker inspect <traefik container> | grep certresolvers
+services:
+  orders-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: orders
+      POSTGRES_USER: orders
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - orders-db:/var/lib/postgresql/data
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orders -d orders"]
+      interval: 5s
+      retries: 10
+
+  orders-api:
+    build: ..
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://orders:${POSTGRES_PASSWORD}@orders-db:5432/orders
+    depends_on:
+      orders-db:
+        condition: service_healthy
+    networks: [internal, traefik]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${TRAEFIK_NETWORK:-root_default}
+      - traefik.http.routers.orders.rule=Host(`${ORDERS_HOST:?set ORDERS_HOST in .env}`)
+      - traefik.http.routers.orders.entrypoints=websecure
+      - traefik.http.routers.orders.tls=true
+      - traefik.http.routers.orders.tls.certresolver=${CERT_RESOLVER:-mytlschallenge}
+      - traefik.http.services.orders.loadbalancer.server.port=8000
+
+networks:
+  internal: {}
+  traefik:
+    external: true
+    name: ${TRAEFIK_NETWORK:-root_default}
+
+volumes:
+  orders-db: {}

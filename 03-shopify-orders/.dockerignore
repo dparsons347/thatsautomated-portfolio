@@ -1,0 +1,6 @@
+tests
+deploy
+test-data
+n8n
+**/__pycache__
+.env
