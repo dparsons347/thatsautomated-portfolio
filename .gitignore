@@ -7,3 +7,4 @@ __pycache__/
 *.pyc
 .venv/
 *.pbix.bak
+qbo_tokens.json
