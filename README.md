@@ -10,7 +10,7 @@ Site: https://thatsautomated.com
 | 02 | [Documents to QuickBooks](02-documents-quickbooks/) | n8n, Python, Claude API, QuickBooks Online, DocuSign, Google Sheets | Built, Loom pending |
 | 03 | [Shopify orders](03-shopify-orders/) | Python (FastAPI), Postgres, Shopify, Stripe, n8n | Built, Loom pending |
 | 04 | [GoHighLevel HVAC build](04-gohighlevel-hvac/) | GoHighLevel, Voice AI | Built, Loom pending |
-| 05 | [Google Workspace intake](05-google-workspace/) | Apps Script, Gmail, Drive, Sheets, Google Chat, Looker Studio | In progress |
+| 05 | [Google Workspace intake](05-google-workspace/) | Apps Script, Gmail, Drive, Sheets, Google Chat, Data Studio | Built, Loom pending |
 | 06 | [Support triage with a human gate](06-support-triage/) | n8n, LangGraph, Claude API, Slack, LangSmith | Queued |
 | 07 | [Notion operations](07-notion-ops/) | n8n, Notion, GoHighLevel, Slack | Live |
 | 08 | [Zapier knowledge-base responder](08-zapier-kb-responder/) | Zapier Tables, Interfaces, Paths, Claude API, GoHighLevel | In progress |
