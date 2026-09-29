@@ -99,6 +99,7 @@ Bills 145 and 146 were posted while the attachment step was still being fixed, s
 | Tim Philip handwritten invoice ($40 total gap) on the review sheet, total corrected to $1,252.50, approve ticked | Posted within a minute as Bill 149 to Decks and Patios, the handwritten photo attached, sheet says "Posted as QuickBooks Bill 149" |
 | Bay Area Concrete Pumping approved without fixing the vendor | Sheet says "Still needs review: vendor "Bay Area Concrete Pumping" is not in QuickBooks", checkbox cleared |
 | Purchase agreement form, Sunset Terrace HOA, $18,500 with 30% deposit | HubSpot deal in Contacted, DocuSign envelope sent to the test signer, row in `p2_agreements`, note in `#leads` |
+| Sunset Terrace agreement signed in DocuSign | Connect called back about 20 seconds after signing: signed PDF filed in the Drive folder as "PA-20260929-103947 Sunset Terrace HOA (signed).pdf", HubSpot deal moved to Won with the close date and a link to the PDF, row marked `signed`, note in `#leads` |
 | Second agreement voided through the DocuSign API | Connect called back about 20 seconds later, row marked `voided` with the reason, note in `#leads` |
 
 ## Files
