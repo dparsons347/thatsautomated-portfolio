@@ -1,0 +1,210 @@
+{
+  "name": "P3: Order notifications",
+  "nodes": [
+    {
+      "name": "Notice from orders service",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        96
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "p3-order-notifications",
+        "authentication": "headerAuth",
+        "responseMode": "lastNode",
+        "responseData": "firstEntryJson",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "REPLACE_WITH_header_auth_credential (header X-Webhook-Key)"
+        }
+      }
+    },
+    {
+      "name": "Compose message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "// The orders service decides WHEN a notice goes out. This node decides WHAT it says.\n// Edit the wording here; the service never needs to change.\nconst n = $json.body ?? {};\nconst hi = n.first_name ? 'Hi ' + n.first_name + ',' : 'Hi,';\nconst esc = (s) => String(s ?? '').replace(/[&<>\"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;' }[c]));\nconst sign = '<p>Thanks,<br>' + esc(n.store || 'Loblolly') + '</p>';\n\nif (n.kind === 'shipped') {\n  const track = n.tracking_url\n    ? '<p>Tracking: <a href=\"' + esc(n.tracking_url) + '\">' + esc(n.tracking_company || 'Track package') + ' ' + esc(n.tracking_number || '') + '</a></p>'\n    : (n.tracking_number ? '<p>Tracking number: ' + esc(n.tracking_company || '') + ' ' + esc(n.tracking_number) + '</p>' : '');\n  return { json: { channel: 'email', notice_id: n.id, to: n.to_email, sender: n.store,\n    subject: 'Your ' + n.store + ' order ' + n.order_number + ' has shipped',\n    html: '<p>' + esc(hi) + '</p><p>Good news: order ' + esc(n.order_number) + ' is on its way.</p>' + track + sign } };\n}\nif (n.kind === 'delayed') {\n  return { json: { channel: 'email', notice_id: n.id, to: n.to_email, sender: n.store,\n    subject: 'An update on your ' + n.store + ' order ' + n.order_number,\n    html: '<p>' + esc(hi) + '</p><p>Order ' + esc(n.order_number) + ' is taking longer than usual to leave our shop. ' +\n      'Nothing is needed from you. We are on it and will email tracking as soon as it ships.</p>' +\n      '<p>If you have a question in the meantime, just reply to this email.</p>' + sign } };\n}\nif (n.kind === 'stuck_alert') {\n  return { json: { channel: 'slack', notice_id: n.id,\n    text: ':warning: *Paid order not shipped* ' + n.store + ' ' + n.order_number + ' ($' + n.total + ')\\n' +\n      'Paid ' + n.paid_at + ', no fulfillment after ' + n.threshold_hours + ' h. The customer was sent a delay notice.' } };\n}\nif (n.kind === 'unmatched_refund') {\n  return { json: { channel: 'slack', notice_id: n.id,\n    text: ':mag: *Stripe refund with no matching wholesale order*\\nCharge ' + n.charge + ', payment intent ' + (n.payment_intent || 'none') +\n      ', refunded $' + n.amount_refunded + '. Check it in Stripe.' } };\n}\nreturn { json: { channel: 'slack', notice_id: n.id, text: ':grey_question: Orders service sent an unknown notice kind: ' + JSON.stringify(n).slice(0, 500) } };"
+      }
+    },
+    {
+      "name": "Email or Slack",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        448,
+        96
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "email",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.channel }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "email"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "slack",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.channel }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "slack"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "name": "Email the customer",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "authentication": "oAuth2",
+        "sendTo": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "emailType": "html",
+        "message": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false,
+          "senderName": "={{ $json.sender }}"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "REPLACE_WITH_gmail_credential"
+        }
+      }
+    },
+    {
+      "name": "Alert the team",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.7,
+      "position": [
+        672,
+        192
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "authentication": "accessToken",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "#automation-alerts"
+        },
+        "messageType": "text",
+        "text": "={{ $json.text }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "mrkdwn": true
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "credentials": {
+        "slackApi": {
+          "name": "REPLACE_WITH_slack_credential"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Notice from orders service": {
+      "main": [
+        [
+          {
+            "node": "Compose message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose message": {
+      "main": [
+        [
+          {
+            "node": "Email or Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email or Slack": {
+      "main": [
+        [
+          {
+            "node": "Email the customer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert the team",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "REPLACE_WITH_error_handler_workflow_id",
+    "timezone": "America/Chicago"
+  }
+}

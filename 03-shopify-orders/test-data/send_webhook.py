@@ -25,7 +25,7 @@ def main() -> None:
     ap.add_argument("base_url")
     ap.add_argument("kind", choices=["shopify-order", "stripe-invoice"])
     ap.add_argument("--secret", default="")
-    ap.add_argument("--shop", default="store-a.myshopify.com")
+    ap.add_argument("--shop", default="loblolly-candle-co.myshopify.com")
     ap.add_argument("--email", default="jordan.lee@example.com")
     ap.add_argument("--bad", action="store_true", help="sign with the wrong key")
     args = ap.parse_args()

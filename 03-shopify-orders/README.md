@@ -4,7 +4,9 @@ A small brand sells through two Shopify stores and invoices its wholesale accoun
 
 Built on Shopify webhooks, Stripe webhooks (test mode), a small Python service (FastAPI) and Postgres on my own VPS, with n8n sending the customer emails and Slack alerts.
 
-Status: service written and tested locally (46 tests against a real Postgres, Sep 29, 2026). Next: deploy, connect the two development stores and Stripe, build the n8n notification workflow, Loom.
+Status: built, deployed and tested end to end on live accounts (Sep 29, 2026). Loom next.
+
+The demo business is Loblolly, a small candle maker: **Loblolly Candle Co** and **Loblolly Home** are the two Shopify development stores, and **Loblolly Wholesale** is boutiques that buy by the case on Stripe invoices.
 
 ## What this proves
 
@@ -38,6 +40,26 @@ Stripe (invoices) ──> /webhooks/stripe ─┘      ^               └─> n
 **Dispatcher** (`app/dispatcher.py`). Every 30 seconds, due notices are posted to the n8n webhook with an `X-Webhook-Key` header. 2xx marks them sent. Anything else waits 1, 2, 4, 8 ... minutes (capped at an hour) and gives up after 10 tries, which `/health` reports.
 
 **n8n** decides the wording and the channel: shipped and delay emails to the customer, stuck and unmatched-refund alerts to `#automation-alerts`. That is the part a client will want to change, so it lives where they can change it.
+
+## Test run (Sep 29, 2026)
+
+Real events from both Shopify dev stores and a Stripe sandbox, one buyer (Jordan Lee) across all three channels:
+
+| Step | What happened |
+|---|---|
+| Paid order #1001 on Loblolly Candle Co | `orders/updated` arrived before `orders/create`; both applied to one row. Customer created, two line items with SKUs |
+| Fulfilled with a UPS tracking number | Order marked fulfilled, one "shipped" notice, n8n emailed Jordan with the tracking link |
+| Paid order #1001 on Loblolly Home, email typed as `Daniel+Loblolly@ThatsAutomated.com` | Same customer record, not a second one (normalized email). Customer now shows 2 orders |
+| Wholesale invoice 4UPSTJAV-0001 paid in Stripe ($384) | Third row, same customer (3 orders). `invoice_payment.paid` linked the payment intent, which on API 2026-08-26 is no longer on the invoice |
+| `stripe events resend` on the invoice.paid event | 200, logged "replay, ignored", `replays = 1`, still one payment row |
+| $96 partial refund in Stripe | `charge.refunded` found the order through the payment intent, `total_refunded = 96.00` |
+| Loblolly Home order left unshipped past the threshold | Sweep marked it STUCK once (a second sweep marked nothing), Slack alert in #automation-alerts, delay email to Jordan |
+| n8n workflow unpublished, then the stuck order fulfilled | Shipped notice failed with n8n's 404 and waited in the outbox (`/health` showed 1 pending). Workflow republished, notice delivered on attempt 2, order status STUCK to fulfilled |
+| `test-data/bad-hmac.sh` | 401 "HMAC does not match", row in `rejected_requests` with the caller's IP |
+
+## n8n workflow
+
+`n8n/order-notifications.json` (credential IDs replaced with `REPLACE_WITH_` placeholders). Webhook with header auth, a Code node that writes the wording for each notice kind, then Gmail for customer emails or Slack for team alerts. It answers only after the email or Slack post succeeds (`responseMode: lastNode`), so a failed send returns an error and the service retries it.
 
 ## Run the tests
 
