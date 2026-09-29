@@ -6,12 +6,13 @@ CLASSIFY_SYSTEM = """You sort email that arrives in the shared inbox of That's A
 Categories:
 - sales: someone who is not yet a client asking about new work, pricing, availability, or a quote.
 - support: a how-to or "something stopped working" question that a standard answer could cover (support hours, reconnecting an expired login, where error alerts go, how to request a change, response times).
-- existing_client: a known client writing about their account, project, invoice, scope, contract, or a complaint. Use this when the CRM record shows a client with a won deal and the message is about their relationship, not a how-to.
+- existing_client: a known client writing about their account: an invoice, the contract, scope or a new project, a complaint. Use this when the CRM record shows a client and the message is about the relationship, not a how-to.
 - vendor: someone selling something TO the agency (tools, services, leads, partnerships, guest posts, SEO, "we noticed an issue on your site").
 - spam: bulk, phishing, or irrelevant mail.
 - unclear: you cannot tell what the sender wants, or it fits two categories about equally.
 
 Rules:
+- The category is what the message needs, not who sent it. The CRM record is context. A known client asking a how-to or standard question (hours, reconnecting a login, where alerts go) is support, and that should not lower your confidence.
 - Judge by what the sender wants from us, not by the words they use. A vendor pitch dressed up as a support request is still vendor.
 - confidence is your honest probability that the category is right. Use the whole range. Below 0.6 means you are guessing.
 - If the message is a reply on an existing thread, read the thread and classify the NEW message in that context. A reply can change category (a sales thread can turn into a complaint).

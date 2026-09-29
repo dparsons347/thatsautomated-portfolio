@@ -80,6 +80,8 @@ I also tried five vendor pitches dressed up as support requests, RFPs and demo r
 | Archive on the spam card | Labeled Archived, out of the inbox, card updated |
 | ANTHROPIC_BASE_URL pointed at a dead host, support_hours seeded | 503 model_unavailable, row queued, one alert in #automation-alerts, no card |
 | URL restored, retry run | Classified on the next attempt, card posted, "Support triage is back" in #automation-alerts |
+| HubSpot token added (read-only service key) | Marcus's card shows Webb Roofing, his Won deal and a link to the record. Unknown senders show "Not in HubSpot" |
+| Live eval with HubSpot on | Known clients asking how-to questions first came back as "existing client" with low confidence. The prompt now says the category is what the message needs, not who sent it; after that, 10 of 10 matched. support_hours sometimes routes to a person because the standard answers don't say who to call on a Saturday, which is the right call |
 
 ## Run the tests
 

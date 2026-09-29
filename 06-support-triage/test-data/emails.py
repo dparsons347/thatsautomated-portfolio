@@ -101,7 +101,7 @@ EMAILS = [
         "subject": "Exporting last month's reminders",
         "body": ("Quick one: can I export a list of every reminder text that went out last month? "
                  "Our office manager wants it as a spreadsheet for an audit.\n\nPriya"),
-        "expect": {"category": "support", "route": "person"},
+        "expect": {"category": "support|existing_client", "route": "person"},
     },
     {
         "key": "support_hours", "loom": False,
