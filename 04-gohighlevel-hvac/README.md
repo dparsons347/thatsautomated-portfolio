@@ -4,7 +4,7 @@ A complete GoHighLevel deployment for a one-truck residential HVAC company, buil
 
 Live site: https://thatsautomatedhvac.com
 
-**Status: built and tested end to end on email (Sep 25, 2026).** The demo runs on email by design; SMS steps stay in place and fall back to email until the number is A2P registered. Loom still to record.
+**Status: built and tested end to end on email (Sep 25, 2026); pre-recording checklist finished Sep 27.** The demo runs on email by design; SMS steps stay in place and fall back to email until the number is A2P registered. Loom still to record.
 Sub-account: That's Automated Heating and Air (locationId `dF6GpnV3NGdeZSjrnIRl`)
 
 ## What this proves
@@ -193,13 +193,15 @@ Voice AI receptionist and Conversation AI (not yet built) are the only recurring
 
 ## Still to do
 
-Before recording:
-- Set test waits back: Unbooked Lead Follow-Up first wait 1 hour, Review Request wait 2 hours
+Before recording (all done Sep 27):
+- Test waits set back: Unbooked Lead Follow-Up first wait 1 hour, Review Request wait 2 hours
 - Review Request re-entry OFF (one review ask per job)
-- Google Calendar time zone to Central
-- Change the booking thank-you text from "A text confirmation is on its way" to "A confirmation is on its way"
-- Retest stop on reply from the plus-address alias
-- Cancel the leftover test appointments (Sep 29 and Sep 30)
+- Google Calendar time zone set to Central
+- Booking thank-you text changed to "A confirmation is on its way"
+- Stop on reply retested from the plus-address alias
+- Leftover test appointments cancelled (calendar empty as of Sep 29)
+
+For the recording, use a fresh plus address (for example `parsodg+hvac2@gmail.com`). Art Vandelay has already been through the workflows and re-entry is off.
 
 Then:
 - Loom (email version of the script)
