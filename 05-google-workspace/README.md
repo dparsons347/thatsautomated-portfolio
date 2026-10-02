@@ -4,7 +4,7 @@ A small tax office's document intake, automated inside the Google Workspace it a
 
 The office, Oakline Tax Group, and its clients are fictional. The mailbox, Drive, Sheets, and Chat space are real.
 
-**Status: built and tested live (Sep 29, 2026). Chat and the report are connected, demo data reset. Loom pending.**
+**Status: built and tested live (Sep 29, 2026). Chat and the report are connected, demo data reset. Walkthrough video recorded Oct 2, 2026, not yet published.**
 
 Changed on Sep 29, 2026 from Microsoft 365 (Power Automate, SharePoint, Power BI) to Google Workspace. Same client story, same failure cases.
 
@@ -38,7 +38,7 @@ Looker Studio report + fridaySummary email (Fridays 4 PM Central)
 | `apps-script/Lib.js` | Pure logic: client matching, document classification, encrypted-PDF check, attachment skip rule, summary math. No Google services, so it runs under Node. |
 | `apps-script/Main.js` | Entry points `processInbox`, `onTrackerEdit`, `fridaySummary`, and the error wrapper. |
 | `apps-script/Setup.js` | `setup()`: tabs, folders, Gmail labels and filter, triggers. Safe to rerun. |
-| `apps-script/Reset.js` | `resetDemo()`: clears Intake and Log, trashes client files and intake threads. Run before a Loom take. |
+| `apps-script/Reset.js` | `resetDemo()`: clears Intake and Log, trashes client files and intake threads. Run before a recording. |
 | `apps-script/Checks.js` | `testChat()`: posts one line to the Chat space to confirm the webhook. |
 | `apps-script/appsscript.json` | Manifest: Central time, V8, Gmail advanced service (for the filter). |
 | `tests/` | `node --test` suites: 22 tests, including the real test-data files. |
@@ -110,3 +110,31 @@ npm test
 | Chat webhook down | Logged as a warning; intake carries on. |
 
 Known limit: if a run dies after saving a file to Drive but before writing its row, the retry saves the file again. The row is written once.
+
+## Walkthrough
+
+Stills from a live run with test documents, in the order the video follows. Sender addresses are blurred.
+
+1. A client sends documents by email.
+   ![Client email with two attachments](screenshots/01-email.png)
+2. Filed to the client's folder.
+   ![Client folder in Drive](screenshots/02-drive.png)
+3. One row per document: client, date, document type.
+   ![Intake tracker rows](screenshots/03-tracker.png)
+4. The team is told in Chat.
+   ![Chat post for the new documents](screenshots/04-chat.png)
+5. The client gets one acknowledgement.
+   ![Acknowledgement email](screenshots/05-ack.png)
+6. Someone picks it up; the sheet records when and how long it waited.
+   ![Row set to Assigned](screenshots/06-assigned.png)
+7. Documents by week, wait times, what is waiting on the client.
+   ![Intake report](screenshots/07-report.png)
+8. Unknown sender: the file goes to a holding folder and Chat asks instead of guessing.
+   ![File in the _Unassigned folder](screenshots/08b-unassigned-folder.png)
+   ![Chat post asking for a client](screenshots/08-unknown-sender.png)
+9. A locked PDF is saved and flagged; the run keeps going.
+   ![Row marked Needs attention](screenshots/09-locked-pdf.png)
+10. Someone renames the tab: the failure is reported within a minute, not in tomorrow's digest.
+    ![Failure alert email](screenshots/10-failure.png)
+11. Real code, inside tools the office already owns.
+    ![processInbox in the Apps Script editor](screenshots/11-code.png)

@@ -6,14 +6,14 @@ Site: https://thatsautomated.com
 
 | # | Project | Stack | Status |
 |---|---|---|---|
-| 01 | [Lead intake to HubSpot](01-lead-intake/) | n8n, HubSpot, Gmail, Slack, Python, Claude API | Built, Loom pending |
-| 02 | [Documents to QuickBooks](02-documents-quickbooks/) | n8n, Python, Claude API, QuickBooks Online, DocuSign, Google Sheets | Built, Loom pending |
-| 03 | [Shopify orders](03-shopify-orders/) | Python (FastAPI), Postgres, Shopify, Stripe, n8n | Built, Loom pending |
-| 04 | [GoHighLevel HVAC build](04-gohighlevel-hvac/) | GoHighLevel, Voice AI | Built, Loom pending |
-| 05 | [Google Workspace intake](05-google-workspace/) | Apps Script, Gmail, Drive, Sheets, Google Chat, Data Studio | Built, Loom pending |
-| 06 | [Support triage with a human gate](06-support-triage/) | n8n, Python (FastAPI, LangGraph), Claude API, HubSpot, Gmail, Slack, LangSmith | Built, Loom pending |
+| 01 | [Lead intake to HubSpot](01-lead-intake/) | n8n, HubSpot, Gmail, Slack, Python, Claude API | Built, video recorded |
+| 02 | [Documents to QuickBooks](02-documents-quickbooks/) | n8n, Python, Claude API, QuickBooks Online, DocuSign, Google Sheets | Built, video recorded |
+| 03 | [Shopify orders](03-shopify-orders/) | Python (FastAPI), Postgres, Shopify, Stripe, n8n | Built, video pending |
+| 04 | [GoHighLevel HVAC build](04-gohighlevel-hvac/) | GoHighLevel, Voice AI | Built, video pending |
+| 05 | [Google Workspace intake](05-google-workspace/) | Apps Script, Gmail, Drive, Sheets, Google Chat, Data Studio | Built, video recorded |
+| 06 | [Support triage with a human gate](06-support-triage/) | n8n, Python (FastAPI, LangGraph), Claude API, HubSpot, Gmail, Slack, LangSmith | Built, video recorded |
 | 07 | [Notion operations](07-notion-ops/) | n8n, Notion, GoHighLevel, Slack | Live |
-| 08 | [Zapier knowledge-base responder](08-zapier-kb-responder/) | Zapier Tables, Interfaces, Paths, Claude API, GoHighLevel | In progress |
+| 08 | [Zapier knowledge-base responder](08-zapier-kb-responder/) | Zapier Tables, Interfaces, Paths, Claude API, GoHighLevel | Built, video recorded |
 
 ## Conventions
 
@@ -25,4 +25,4 @@ Site: https://thatsautomated.com
 
 ## Layout
 
-Each project folder has a README (what it does, how to run it, what breaks and what catches it), exported workflow definitions where the platform allows it, and screenshots of the execution logs used in the Loom.
+Each project folder has a README (what it does, how to run it, what breaks and what catches it), exported workflow definitions where the platform allows it, and screenshots of the execution logs used in the walkthrough videos.

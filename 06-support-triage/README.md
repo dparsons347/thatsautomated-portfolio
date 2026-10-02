@@ -4,7 +4,7 @@ Everything comes into one inbox: sales questions, support, existing clients, ven
 
 Built with n8n (Gmail, Slack, the queue and everything a client would change) around a small Python service (FastAPI + LangGraph) that does the one narrow AI job, traced in LangSmith so every decision can be inspected.
 
-Status: built, deployed and tested end to end on live accounts (Sep 29, 2026). Loom next.
+Status: built, deployed and tested end to end on live accounts (Sep 29, 2026). Walkthrough video recorded Oct 2, 2026, not yet published.
 
 ## What this proves
 
@@ -119,6 +119,34 @@ docker exec root-n8n-1 wget -qO- http://triage-api:8000/health
 | Someone reassigns to a bot or app | Ephemeral "pick a person", nothing changes (users.info check; Slack's user picker can't hide bots) |
 | Two people click Approve | The second gets "Already handled", one email goes out |
 | The same email is polled twice | Stored once, keyed on the Gmail message ID |
+
+## Walkthrough
+
+Stills from a live run with the canned test emails, in the order the video follows.
+
+1. One shared inbox, five kinds of message.
+   ![Support Triage label in Gmail](screenshots/01-inbox.png)
+2. Each message sorted, with a reason, and a draft where there's a standard answer.
+   ![Five cards in Slack](screenshots/02-cards.png)
+3. What a person sees before deciding.
+   ![One card close up](screenshots/03-card-detail.png)
+   ![Draft and buttons](screenshots/03b-draft-and-buttons.png)
+4. Approve: sent from Gmail on the same thread.
+   ![Card after approval](screenshots/04-approved.png)
+5. Edit before sending.
+   ![Edit modal](screenshots/05-edit.png)
+6. Reassign to a person. Nothing sends without a click.
+   ![Reassign picker](screenshots/06-reassign.png)
+7. A reply on an existing thread is read with its history and goes to a person.
+   ![Card for the angry reply](screenshots/07-angry-reply.png)
+8. Every card links to its trace: what the model saw and why it decided.
+   ![LangSmith trace](screenshots/08-trace.png)
+9. One number decides how sure it has to be before drafting.
+   ![Threshold in the Settings node](screenshots/09-threshold.png)
+10. The AI is down: queued, alerted once, retried, recovered.
+    ![Outage and recovery posts in Slack](screenshots/10-outage.png)
+11. The AI does one narrow job inside a workflow a person controls.
+    ![Triage workflow canvas](screenshots/11-workflow.png)
 
 ## Why this stack
 

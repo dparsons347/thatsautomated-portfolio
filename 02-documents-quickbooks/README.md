@@ -2,7 +2,7 @@
 
 Two legs. **Bills in:** vendor bills arrive by email as PDFs or phone photos. Claude reads each one, a Python check decides whether the numbers can be trusted, and only clean bills go on to QuickBooks. Anything odd lands on a review sheet with the reason spelled out, and ticking Approve sends it on. **Agreements out:** a form produces a purchase agreement, DocuSign collects the signature, and the signed PDF, the CRM deal and Slack all update on their own. Built on n8n, Claude (Sonnet), Python, the QuickBooks Online sandbox, Google Sheets and Drive, DocuSign (developer sandbox) and HubSpot.
 
-Status: both legs built and tested (Sep 29, 2026). Loom next.
+Status: both legs built and tested (Sep 29, 2026). Walkthrough video recorded Oct 2, 2026, not yet published.
 
 ## What this proves
 
@@ -179,7 +179,38 @@ Posting uses HTTP Request nodes on the QuickBooks credential rather than the Qui
 - Per-envelope Connect (`eventNotification`) works on the DocuSign developer account with no account-level Connect setup.
 - The webhook trigger on the posting workflow has no auth. It only posts rows that are already `ready` and not yet posted, but add header auth before pointing it at real books.
 
+## Walkthrough
+
+Stills from a live run against the QuickBooks sandbox, in the order the video follows.
+
+1. Supplier invoices arrive by email, PDFs and phone photos.
+   ![AP Intake label in Gmail](screenshots/01-inbox.png)
+2. Intake: hash for duplicates, Claude reads the file, Python checks the math.
+   ![Document intake canvas](screenshots/02-intake-workflow.png)
+3. About twenty seconds each, now bills in QuickBooks.
+   ![QuickBooks bills list](screenshots/03-qbo-bills.png)
+4. The angled phone photo it read, attached to the bill, on the vendor's mapped account.
+   ![Ellis Equipment Rental bill](screenshots/04-ellis-bill.png)
+5. Lines add to $1,252.50, the total says $1,292.50. It goes to a person, not to QuickBooks.
+   ![Review alert in Slack](screenshots/05b-review-alert.png)
+   ![Review sheet row for the handwritten invoice](screenshots/05-handwritten.png)
+6. The reviewer fixes the total and ticks approve. Posted within a minute.
+   ![Review sheet after approval](screenshots/06-approved.png)
+7. Same file sent twice: caught by hash before any model call.
+   ![Documents table with the duplicate row](screenshots/07-duplicate.png)
+8. Different file, same invoice: QuickBooks is checked before anything is created.
+   ![Duplicate bill not posted](screenshots/08-qbo-dup-check.png)
+9. The other direction: a purchase agreement form.
+   ![Purchase agreement form](screenshots/09-agreement-form.png)
+   ![Agreement sent](screenshots/09b-agreement-sent.png)
+10. Out for signature through DocuSign.
+    ![DocuSign signing screen](screenshots/10-docusign.png)
+11. Signed copy filed, deal marked Won, team told.
+    ![Signed PDF in Drive](screenshots/11-signed-drive.png)
+    ![HubSpot deal in Won](screenshots/11-signed-deal.png)
+    ![Slack post](screenshots/11-signed-slack.png)
+
 ## What's next
 
-- Loom.
+- Publish the walkthrough video and link it here.
 - Header auth on the three webhooks (posting, queue, DocuSign events) before this touches real books. DocuSign Connect can also sign its calls with HMAC once it is set up at the account level.

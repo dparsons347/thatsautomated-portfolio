@@ -4,7 +4,7 @@ A text-message support line for a one-truck HVAC company, built entirely in Zapi
 
 Demonstration build. The company is fictional. It reuses the Project 4 GoHighLevel sub-account, phone number, and test contacts.
 
-Status: in progress, started Sep 14, 2026.
+Status: built (Sep 25, 2026). Walkthrough video recorded Oct 2, 2026 on the n8n version of the same design, not yet published.
 
 ## What this proves
 
@@ -77,6 +77,34 @@ Three, in [`prompts/`](prompts/), pasted into the Zap steps unchanged. Every one
 
 New rules go live immediately but unreviewed, and the owner can deactivate one in a click. Inactive until reviewed is safer for a business answering legal or medical questions, and is a one-checkbox change.
 
+## Walkthrough
+
+Stills from a live run of the n8n version, which is the same design, in the order the video follows. The Zapier editor stills are not taken yet.
+
+1. A customer asks something the business answers every day.
+   ![Customer question in the GoHighLevel conversation](screenshots/01-question.png)
+2. Answered from the business's own rules in seconds.
+   ![Run down the answered path](screenshots/02-answered.png)
+3. Account questions are answered from that customer's record and nobody else's.
+   ![Find customer output](screenshots/03-customer-record.png)
+4. Not in the rules: it escalates instead of inventing an answer.
+   ![Parse answer output with ESCALATE](screenshots/04-escalate.png)
+5. The owner answers in Slack.
+   ![Needs a human answer card](screenshots/05-slack-form.png)
+   ![Reply form](screenshots/05b-answer-form.png)
+6. The answer becomes a general rule, with the customer's details stripped.
+   ![New rule added post](screenshots/06-new-rule.png)
+   ![Rules table with the new row](screenshots/06b-kb-rules-table.png)
+7. The next customer gets it straight away.
+   ![Second customer answered from the new rule](screenshots/07-second-customer.png)
+8. Emergencies skip the AI and alert the owner.
+   ![Emergency branch](screenshots/08-emergency.png)
+9. The AI step dies: the customer still gets a holding message and a person is told.
+   ![Run down the error output](screenshots/09-killed-key.png)
+   ![Responder failed alert](screenshots/09b-failed-alert.png)
+10. The whole workflow.
+    ![KB Responder canvas](screenshots/00-workflow-overview.png)
+
 ## Build checklist
 
 - [x] Zapier account: Paths, Webhooks, Tables available
@@ -88,7 +116,7 @@ New rules go live immediately but unreviewed, and the owner can deactivate one i
 - [x] Zap C
 - [ ] Twelve test cases run, `conversations` screenshotted
 - [x] Failure injection run (model name `x`, Zap C caught it)
-- [ ] Loom (3:00)
+- [x] Walkthrough video (recorded Oct 2, 2026 on the n8n version, not yet published)
 - [ ] Site page, Upwork portfolio item, Zapier back in the Upwork skills list
 
 ## Notes

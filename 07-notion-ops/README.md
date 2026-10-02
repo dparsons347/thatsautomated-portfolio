@@ -109,5 +109,5 @@ Stills from a live run with test records ("Test Prospect"), in the order the vid
 
 ## Still to do
 
-- Loom (scheduled week 8 per the plan)
+- Walkthrough video recorded Oct 2, 2026. Publish it and link it here.
 - Intake from Upwork proposals into the Proposals database
