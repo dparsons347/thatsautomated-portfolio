@@ -45,7 +45,7 @@ A2P is not needed for the demo. It stays on email; the SMS steps fail over to th
 
 ## Test results (Sep 25, 2026, email)
 
-Test lead: "Art Vandelay", `parsodg+hvac1@gmail.com`, 334-555-0142 (a Gmail plus address, so it lands in the same inbox but is a new GHL contact with no workflow history). Unhappy-reply test used the second test contact.
+Test lead: "Art Vandelay", `yourname+hvac1@gmail.com`, 334-555-0142 (a Gmail plus address, so it lands in the same inbox but is a new GHL contact with no workflow history). Unhappy-reply test used the second test contact.
 
 | # | Scenario | Result |
 |---|---|---|
@@ -201,7 +201,7 @@ Before recording (all done Sep 27):
 - Stop on reply retested from the plus-address alias
 - Leftover test appointments cancelled (calendar empty as of Sep 29)
 
-For the recording, use a fresh plus address (for example `parsodg+hvac2@gmail.com`). Art Vandelay has already been through the workflows and re-entry is off.
+For the recording, use a fresh plus address (for example `yourname+hvac2@gmail.com`). Art Vandelay has already been through the workflows and re-entry is off.
 
 Then:
 - Loom (email version of the script)

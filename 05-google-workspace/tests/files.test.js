@@ -44,5 +44,5 @@ test('all Apps Script files load together in one global scope', () => {
     assert.equal(typeof ctx[fn], 'function', fn);
   }
   assert.equal(ctx.COL['File ID'], 14);
-  assert.equal(ctx.SEED_CLIENTS[0][1], 'parsodg@gmail.com');
+  assert.equal(ctx.SEED_CLIENTS[0][1], 'marcus.rivera@example.com');
 });

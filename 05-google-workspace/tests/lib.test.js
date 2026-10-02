@@ -3,13 +3,13 @@ const assert = require('node:assert/strict');
 const L = require('../apps-script/Lib.js');
 
 const clients = [
-  { name: 'Marcus Rivera', emails: ['parsodg@gmail.com'], domains: [] },
+  { name: 'Marcus Rivera', emails: ['mrivera.demo@gmail.com'], domains: [] },
   { name: 'Brightline Dental', emails: [], domains: ['brightlinedental.com'] },
   { name: 'Gmail Claimer', emails: [], domains: ['gmail.com'] }, // a mistake in the Clients tab
 ];
 
 test('parseAddress handles names, quotes and bare addresses', () => {
-  assert.deepEqual(L.parseAddress('Marcus Rivera <Parsodg@Gmail.com>'), { name: 'Marcus Rivera', email: 'parsodg@gmail.com' });
+  assert.deepEqual(L.parseAddress('Marcus Rivera <MRivera.Demo@Gmail.com>'), { name: 'Marcus Rivera', email: 'mrivera.demo@gmail.com' });
   assert.deepEqual(L.parseAddress('"Rivera, Marcus" <m@x.com>'), { name: 'Rivera, Marcus', email: 'm@x.com' });
   assert.deepEqual(L.parseAddress('m@x.com'), { name: '', email: 'm@x.com' });
 });
@@ -20,7 +20,7 @@ test('splitList trims, lowercases and drops blanks', () => {
 });
 
 test('matchClient: exact email wins', () => {
-  assert.equal(L.matchClient('PARSODG@gmail.com', clients).name, 'Marcus Rivera');
+  assert.equal(L.matchClient('MRIVERA.DEMO@gmail.com', clients).name, 'Marcus Rivera');
 });
 
 test('matchClient: business domain matches', () => {
@@ -28,7 +28,7 @@ test('matchClient: business domain matches', () => {
 });
 
 test('matchClient: free-mail domain never matches by domain', () => {
-  assert.equal(L.matchClient('parsodg+hvac1@gmail.com', clients), null);
+  assert.equal(L.matchClient('mrivera.demo+hvac1@gmail.com', clients), null);
   assert.equal(L.matchClient('stranger@yahoo.com', clients), null);
 });
 

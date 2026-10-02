@@ -71,7 +71,7 @@ New, Needs assignment (unknown sender), Needs attention (locked PDF or no attach
 
 ## Live test (Sep 29, 2026)
 
-Sheet "Oakline Intake Tracker" and its bound script, created with clasp and set up with `setup()`. Test emails sent from parsodg@gmail.com (client Marcus Rivera) to daniel+intake@thatsautomated.com. Chat webhook not yet set, so Chat posts were logged instead.
+Sheet "Oakline Intake Tracker" and its bound script, created with clasp and set up with `setup()`. Test emails sent from a personal Gmail address (listed for client Marcus Rivera in the Clients tab) to daniel+intake@thatsautomated.com. Chat webhook not yet set, so Chat posts were logged instead.
 
 | # | Case | Result |
 |---|---|---|
@@ -90,7 +90,7 @@ Found and fixed during the run: Sheets turned the document type "1099" into a nu
 ## Before recording
 
 1. Open `Reset.gs` in the editor and run `resetDemo`.
-2. Send the happy-path email from parsodg@gmail.com (client Marcus Rivera) and the unknown-sender email from a second address such as parsodg+hvac1@gmail.com.
+2. Send the happy-path email from the address listed for Marcus Rivera in the Clients tab, and the unknown-sender email from a second address that isn't listed (a Gmail plus address works).
 3. Open the Chat space "Oakline Intake" next to the tracker.
 
 ## Tests

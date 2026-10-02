@@ -20,9 +20,9 @@ var COL = {}; INTAKE_HEADERS.forEach(function (h, i) { COL[h] = i + 1; });
 
 var STAFF = ['Dana Whitfield', 'Luis Ortega', 'Priya Natarajan'];
 
-// Fictional clients. The first one is an address Daniel controls, used in the Loom.
+// Fictional clients. For a demo, put an address you control on the first row of the Clients tab.
 var SEED_CLIENTS = [
-  ['Marcus Rivera', 'parsodg@gmail.com', '', '', 'Marcus'],
+  ['Marcus Rivera', 'marcus.rivera@example.com', '', '', 'Marcus'],
   ['Brightline Dental', '', 'brightlinedental.com', '', 'Dr. Kim'],
   ['Hollis Family Farm', 'accounts@hollisfarm.com', '', '', 'June'],
   ['Carver & Webb Architects', '', 'carverwebb.com', '', 'Nora']
