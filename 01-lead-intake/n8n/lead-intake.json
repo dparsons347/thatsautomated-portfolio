@@ -94,6 +94,142 @@
       }
     },
     {
+      "name": "Hosted lead form",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        224,
+        464
+      ],
+      "parameters": {
+        "authentication": "none",
+        "formTitle": "Request a quote",
+        "formDescription": "Tell us what you need and we'll get back to you the same day.",
+        "formFields": {
+          "values": [
+            {
+              "fieldName": "name",
+              "fieldLabel": "Name",
+              "fieldType": "text",
+              "requiredField": true
+            },
+            {
+              "fieldName": "email",
+              "fieldLabel": "Email",
+              "fieldType": "email",
+              "requiredField": true
+            },
+            {
+              "fieldName": "phone",
+              "fieldLabel": "Phone",
+              "fieldType": "text"
+            },
+            {
+              "fieldName": "company",
+              "fieldLabel": "Company",
+              "fieldType": "text"
+            },
+            {
+              "fieldName": "message",
+              "fieldLabel": "How can we help?",
+              "fieldType": "textarea",
+              "requiredField": true
+            }
+          ]
+        },
+        "responseMode": "onReceived",
+        "options": {
+          "path": "request-a-quote",
+          "buttonLabel": "Send",
+          "appendAttribution": false,
+          "ignoreBots": true,
+          "respondWithOptions": {
+            "values": {
+              "respondWith": "text",
+              "formSubmittedText": "Thanks, we have your request and will be in touch shortly."
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Normalize hosted form lead",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        448,
+        464
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "h1",
+              "name": "name",
+              "value": "={{ $json.name ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "h2",
+              "name": "email",
+              "value": "={{ $json.email ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "h3",
+              "name": "phone",
+              "value": "={{ $json.phone ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "h4",
+              "name": "company",
+              "value": "={{ $json.company ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "h5",
+              "name": "message",
+              "value": "={{ $json.message ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "h6",
+              "name": "source",
+              "value": "website_form",
+              "type": "string"
+            },
+            {
+              "id": "h7",
+              "name": "source_label",
+              "value": "Website form",
+              "type": "string"
+            },
+            {
+              "id": "h8",
+              "name": "reject_reason",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "h9",
+              "name": "received_at",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            },
+            {
+              "id": "h10",
+              "name": "simulate_429",
+              "value": "={{ 0 }}",
+              "type": "number"
+            }
+          ]
+        }
+      }
+    },
+    {
       "name": "Basic checks",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -455,10 +591,6 @@
               {
                 "property": "lead_source_detail",
                 "value": "={{ $json.source }}"
-              },
-              {
-                "property": "enrichment_status",
-                "value": "pending"
               }
             ]
           }
@@ -505,6 +637,43 @@
             }
           ],
           "combinator": "and"
+        }
+      }
+    },
+    {
+      "name": "Mark enrichment pending",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2.2,
+      "position": [
+        1792,
+        16
+      ],
+      "parameters": {
+        "resource": "contact",
+        "operation": "upsert",
+        "authentication": "appToken",
+        "email": "={{ $('Not disposable').item.json.email }}",
+        "additionalFields": {
+          "customPropertiesUi": {
+            "customPropertiesValues": [
+              {
+                "property": "enrichment_status",
+                "value": "pending"
+              }
+            ]
+          }
+        },
+        "options": {
+          "resolveData": false
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "hubspotAppToken": {
+          "name": "HubSpot Service Key account"
         }
       }
     },
@@ -860,7 +1029,7 @@
         368
       ],
       "parameters": {
-        "content": "## Lead intake\nTwo sources, one pipeline: site form webhook (POST /webhook/lead-intake) and the leads/inbound Gmail label (Claude pulls the lead out of the email). Junk filter, disposable-domain check, HubSpot upsert by email (dedupe), deal on new contacts only, Slack alert to #leads, every lead logged to the Lead log sheet. New leads kick off 'Project 1: Enrich lead' without waiting, so the rep is never held up by enrichment.",
+        "content": "## Lead intake\nThree ways in, one pipeline: site form webhook (POST /webhook/lead-intake), the hosted form (/form/request-a-quote), and the leads/inbound Gmail label (Claude pulls the lead out of the email). Junk filter, disposable-domain check, HubSpot upsert by email (dedupe), deal on new contacts only, Slack alert to #leads, every lead logged to the Lead log sheet. New leads kick off 'Project 1: Enrich lead' without waiting, so the rep is never held up by enrichment.",
         "color": 4
       }
     },
@@ -1355,7 +1524,7 @@
       "main": [
         [
           {
-            "node": "Create deal",
+            "node": "Mark enrichment pending",
             "type": "main",
             "index": 0
           }
@@ -1481,6 +1650,39 @@
         [
           {
             "node": "Log failed write",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hosted lead form": {
+      "main": [
+        [
+          {
+            "node": "Normalize hosted form lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize hosted form lead": {
+      "main": [
+        [
+          {
+            "node": "Basic checks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark enrichment pending": {
+      "main": [
+        [
+          {
+            "node": "Create deal",
             "type": "main",
             "index": 0
           }

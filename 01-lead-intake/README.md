@@ -14,7 +14,8 @@ Leads come in from two places, get cleaned and checked, land in HubSpot once (no
 
 | Source | How it arrives | Parsing |
 |---|---|---|
-| Website form | `POST /webhook/lead-intake` with name, email, phone, company, message | Direct field mapping |
+| Website form (webhook) | `POST /webhook/lead-intake` with name, email, phone, company, message | Direct field mapping |
+| Hosted form | n8n form at `/form/request-a-quote` with the same five fields, for a site that has no form of its own | Direct field mapping |
 | Email | Anything sent to `daniel+leads@thatsautomated.com` gets the `leads/inbound` Gmail label; n8n polls the label every minute | Claude (Haiku 4.5) extracts the customer from the email, including Angi/Thumbtack-style notifications where the customer is inside the forwarded body, and flags non-leads |
 
 ## Workflows
@@ -23,13 +24,13 @@ Exports are in `n8n/`. Credential IDs are stripped; on import, attach your own H
 
 ### Project 1: Lead intake
 
-1. Normalize both sources to one shape.
+1. Normalize every entry point (webhook, hosted form, email) to one shape.
 2. Basic checks: email present and valid, name present, no spam keywords, no more than 3 links. Failures go to the Lead log as `rejected` with the reason.
 3. Disposable domain check against an n8n data table (about 9,000 domains).
-4. HubSpot contact upsert by email. Sets `lead_source_detail` and `enrichment_status = pending`.
-5. New contact: create a deal in New, post to `#leads`, log `new`, start enrichment without waiting. Existing contact: post an "updated lead" note and log `updated`.
+4. HubSpot contact upsert by email. Sets `lead_source_detail`.
+5. New contact: set `enrichment_status = pending`, create a deal in New, post to `#leads`, log `new`, start enrichment without waiting. Existing contact: post an "updated lead" note and log `updated`. Its enrichment status is left alone, so a repeat inquiry does not send a finished contact back through enrichment.
 
-**Backoff on HubSpot writes.** Any error on the upsert (429, 5xx, timeout) goes to a retry loop that waits 2, 4, then 8 seconds. After the 4th failed attempt the full lead is posted to `#automation-alerts` and logged as `failed`. A test hook in front of the upsert fails the first N attempts with a fake 429 when the form payload includes `"_simulate_429": N`. That is how the Loom shows both outcomes:
+**Backoff on HubSpot writes.** Any error on the upsert (429, 5xx, timeout) goes to a retry loop that waits 2, 4, then 8 seconds. After the 4th failed attempt the full lead is posted to `#automation-alerts` and logged as `failed`. A test hook in front of the upsert fails the first N attempts with a fake 429 when the webhook payload includes `"_simulate_429": N`. That is how the Loom shows both outcomes:
 
 ```bash
 # recovers on attempt 3
