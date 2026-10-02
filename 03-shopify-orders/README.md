@@ -4,7 +4,7 @@ A small brand sells through two Shopify stores and invoices its wholesale accoun
 
 Built on Shopify webhooks, Stripe webhooks (test mode), a small Python service (FastAPI) and Postgres on my own VPS, with n8n sending the customer emails and Slack alerts.
 
-Status: built, deployed and tested end to end on live accounts (Sep 29, 2026). Loom next.
+Status: built, deployed and tested end to end on live accounts (Sep 29, 2026). Walkthrough video recorded Oct 2, 2026, not yet published.
 
 The demo business is Loblolly, a small candle maker: **Loblolly Candle Co** and **Loblolly Home** are the two Shopify development stores, and **Loblolly Wholesale** is boutiques that buy by the case on Stripe invoices.
 
@@ -33,7 +33,7 @@ Stripe (invoices) ──> /webhooks/stripe ─┘      ^               └─> n
 
 **Stripe** (`app/stripe_events.py`). Wholesale buyers get Stripe invoices. `invoice.paid` creates the wholesale order, its lines and the payment. `charge.refunded` records refunds against it, found through the payment intent. On Stripe API versions from 2025-03-31 on, the payment intent is no longer on the invoice, so `invoice_payment.paid` supplies the link; both shapes are handled. A refund that matches no wholesale payment raises an alert instead of guessing.
 
-**Postgres** (`migrations/001_init.sql`). `channels`, `customers`, `orders` (unique on channel + external ID), `order_lines`, `payments`, `refunds`, `fulfillments`, `webhook_events`, `rejected_requests`, `notifications`, and the `orders_unified` view, which is the one table the Loom shows.
+**Postgres** (`migrations/001_init.sql`). `channels`, `customers`, `orders` (unique on channel + external ID), `order_lines`, `payments`, `refunds`, `fulfillments`, `webhook_events`, `rejected_requests`, `notifications`, and the `orders_unified` view, which is the one table the video shows.
 
 **Sweep** (`app/sweep.py`). Every 15 minutes: paid Shopify orders older than `STUCK_AFTER_MINUTES` with no successful fulfillment, not cancelled and not fully refunded, are marked stuck. Each gets one `stuck_alert` and one `delayed` notice (unique keys, so running the sweep again does nothing new). Wholesale is left out on purpose because it ships by freight on its own schedule. A Postgres advisory lock keeps two copies of the service from sweeping at once. `POST /admin/sweep` runs it on demand.
 
@@ -56,6 +56,30 @@ Real events from both Shopify dev stores and a Stripe sandbox, one buyer (Jordan
 | Loblolly Home order left unshipped past the threshold | Sweep marked it STUCK once (a second sweep marked nothing), Slack alert in #automation-alerts, delay email to Jordan |
 | n8n workflow unpublished, then the stuck order fulfilled | Shipped notice failed with n8n's 404 and waited in the outbox (`/health` showed 1 pending). Workflow republished, notice delivered on attempt 2, order status STUCK to fulfilled |
 | `test-data/bad-hmac.sh` | 401 "HMAC does not match", row in `rejected_requests` with the caller's IP |
+
+## Walkthrough
+
+Stills from a live run on Oct 2, 2026, in the order the video follows. The terminal images are drawn from the server's real output, with the sending IP address masked.
+
+1. Two Shopify stores that don't know about each other.
+   ![Order lists for both stores](screenshots/01-sources.png)
+2. Shopify sent "order updated" before "order created". It still lands as one row.
+   ![Receiver log and the single row](screenshots/04-out-of-order.png)
+3. Wholesale orders are paid Stripe invoices.
+   ![Paid invoice in the Stripe sandbox](screenshots/02-stripe-invoice.png)
+4. One customer, three channels, one table.
+   ![orders_unified with three rows](screenshots/03-unified.png)
+5. Stripe resends a payment event. It is logged as a replay and ignored, so there is still one payment.
+   ![Resending the event from the Stripe Shell](screenshots/05a-resend.png)
+   ![Replay log line and the one payment row](screenshots/05-replay.png)
+6. A paid order nobody shipped: the team is alerted and the customer gets a note, once.
+   ![Slack alert and the delay email](screenshots/06-stuck.png)
+7. Shipped, with tracking. The wording lives in n8n so the owner can change it.
+   ![Shipped email](screenshots/07-shipped.png)
+8. A request without the store's signature is rejected and logged.
+   ![Forged webhook returning 401](screenshots/08-forged.png)
+9. n8n only handles the customer and team messages.
+   ![n8n notification workflow](screenshots/09-n8n.png)
 
 ## n8n workflow
 
