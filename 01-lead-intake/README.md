@@ -103,3 +103,32 @@ Custom contact properties: `enrichment_status` (pending/done/failed), `company_s
 | Company site down or slow | 10 s timeout, 3 tries, then scored from form fields with the reason in Slack; hourly retry picks it up later |
 | Claude returns junk | Parsed defensively, falls back to form-only score |
 | Any unhandled node error | Error Handler posts workflow, node, error and execution link to `#automation-alerts` |
+
+## Walkthrough
+
+Stills from a live run on test data, in the order the video follows.
+
+1. The intake workflow: validate, dedupe, write to HubSpot, alert, hand off to enrichment.
+   ![Lead intake canvas](screenshots/01-workflow.png)
+2. A lead submits the website form.
+   ![Hosted form filled in](screenshots/02-form.png)
+3. The run takes about four seconds.
+   ![n8n execution of a new lead](screenshots/03-execution.png)
+4. Contact and deal created and scored. Enrichment status, score, company summary and size are on the contact.
+   ![HubSpot contact](screenshots/04-hubspot-contact.png)
+5. The rep is alerted right away; enrichment follows in the same thread, with the reasons for the score.
+   ![Slack alert and enrichment reply](screenshots/05-slack-thread.png)
+6. A lead that arrives as an email: Claude pulls out name, phone, company and the ask, and the same workflow takes over.
+   ![Email lead in Slack](screenshots/06-email-lead.png)
+   ![n8n run of an email lead](screenshots/06-email-lead-run.png)
+7. Same person writes again: one contact, one deal, "updated" not "new".
+   ![New lead then updated lead](screenshots/07-duplicate.png)
+8. A company site that never answers: lead kept, scored from the form, retried hourly.
+   ![Enrichment failed thread](screenshots/08-dead-site.png)
+9. HubSpot rate limits: back off and retry, and if it still fails, a person gets the full lead.
+   ![Backoff run](screenshots/09-rate-limit.png)
+   ![Alert for the lead that gave up](screenshots/09b-rate-limit-alert.png)
+10. Every lead logged to a sheet the owner can filter.
+    ![Lead log sheet](screenshots/10-lead-log.png)
+11. Timeouts and bad model output are covered by tests.
+    ![Enrichment tests passing](screenshots/11-tests.png)

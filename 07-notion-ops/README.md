@@ -79,8 +79,35 @@ An Error Trigger workflow that every other workflow points at. Posts workflow na
 | Sep 11 | Project status Inquiry to Scoping in Notion | GHL opportunity moved New lead to Contacted in under 60 s |
 | Sep 11 | Weekly Digest manual run | Posted to #leads |
 
+## Walkthrough
+
+Stills from a live run with test records ("Test Prospect"), in the order the video follows.
+
+1. Clients, projects, proposals and tasks in one place.
+   ![Ops workspace](screenshots/01-workspace.png)
+   ![Projects database](screenshots/01b-projects.png)
+2. An inquiry from the website.
+   ![Contact form filled in](screenshots/02-form.png)
+3. A client and a project created, linked.
+   ![Client record](screenshots/03-records.png)
+   ![Project in Inquiry](screenshots/03b-project.png)
+4. And a Slack post, instead of an email read three days later.
+   ![#leads post](screenshots/04-leads.png)
+5. Change status in Notion, the CRM stage follows.
+   ![Project at Proposal sent](screenshots/05-status-sync.png)
+   ![Status sync post](screenshots/05b-status-sync-slack.png)
+6. Monday morning: pipeline, what's new, what's gone quiet, what's overdue.
+   ![Weekly digest](screenshots/06-digest.png)
+7. Same person, typed differently: one client.
+   ![One client, two projects](screenshots/07-dedupe.png)
+8. An over-long message: Notion rejects the field and the run stops.
+   ![Failed run](screenshots/08-failed-run.png)
+9. Every workflow reports its failures to one channel within a second.
+   ![Error Handler post](screenshots/09-error-handler.png)
+10. The workflows that do the plumbing.
+    ![n8n workflows](screenshots/11-workflows.png)
+
 ## Still to do
 
-- Screenshots of each canvas and of an Error Handler post
 - Loom (scheduled week 8 per the plan)
 - Intake from Upwork proposals into the Proposals database
