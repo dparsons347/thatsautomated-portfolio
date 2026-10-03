@@ -30,7 +30,7 @@ Exports are in `n8n/`. Credential IDs are stripped; on import, attach your own H
 4. HubSpot contact upsert by email. Sets `lead_source_detail`.
 5. New contact: set `enrichment_status = pending`, create a deal in New, post to `#leads`, log `new`, start enrichment without waiting. Existing contact: post an "updated lead" note and log `updated`. Its enrichment status is left alone, so a repeat inquiry does not send a finished contact back through enrichment.
 
-**Backoff on HubSpot writes.** Any error on the upsert (429, 5xx, timeout) goes to a retry loop that waits 2, 4, then 8 seconds. After the 4th failed attempt the full lead is posted to `#automation-alerts` and logged as `failed`. A test hook in front of the upsert fails the first N attempts with a fake 429 when the webhook payload includes `"_simulate_429": N`. That is how the Loom shows both outcomes:
+**Backoff on HubSpot writes.** Any error on the upsert (429, 5xx, timeout) goes to a retry loop that waits 2, 4, then 8 seconds. After the 4th failed attempt the full lead is posted to `#automation-alerts` and logged as `failed`. A test hook in front of the upsert fails the first N attempts with a fake 429 when the webhook payload includes `"_simulate_429": N`. That is how the video shows both outcomes:
 
 ```bash
 # recovers on attempt 3

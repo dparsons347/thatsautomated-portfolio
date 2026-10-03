@@ -9,7 +9,7 @@ Site: https://thatsautomated.com
 | 01 | [Lead intake to HubSpot](01-lead-intake/) | n8n, HubSpot, Gmail, Slack, Python, Claude API | Built, video recorded |
 | 02 | [Documents to QuickBooks](02-documents-quickbooks/) | n8n, Python, Claude API, QuickBooks Online, DocuSign, Google Sheets | Built, video recorded |
 | 03 | [Shopify orders](03-shopify-orders/) | Python (FastAPI), Postgres, Shopify, Stripe, n8n | Built, video recorded |
-| 04 | [GoHighLevel HVAC build](04-gohighlevel-hvac/) | GoHighLevel, Voice AI | Built, video pending |
+| 04 | [GoHighLevel HVAC build](04-gohighlevel-hvac/) | GoHighLevel, Voice AI | Built, video recorded |
 | 05 | [Google Workspace intake](05-google-workspace/) | Apps Script, Gmail, Drive, Sheets, Google Chat, Data Studio | Built, video recorded |
 | 06 | [Support triage with a human gate](06-support-triage/) | n8n, Python (FastAPI, LangGraph), Claude API, HubSpot, Gmail, Slack, LangSmith | Built, video recorded |
 | 07 | [Notion operations](07-notion-ops/) | n8n, Notion, GoHighLevel, Slack | Live |

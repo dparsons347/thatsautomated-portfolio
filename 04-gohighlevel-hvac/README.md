@@ -4,7 +4,7 @@ A complete GoHighLevel deployment for a one-truck residential HVAC company, buil
 
 Live site: https://thatsautomatedhvac.com
 
-**Status: built and tested end to end on email (Sep 25, 2026); pre-recording checklist finished Sep 27.** The demo runs on email by design; SMS steps stay in place and fall back to email until the number is A2P registered. Loom still to record.
+**Status: built and tested end to end on email (Sep 25, 2026); pre-recording checklist finished Sep 27.** The demo runs on email by design; SMS steps stay in place and fall back to email until the number is A2P registered. Walkthrough stills captured from a live run on Oct 2, 2026. Video recorded the same day.
 Sub-account: That's Automated Heating and Air (locationId `dF6GpnV3NGdeZSjrnIRl`)
 
 ## What this proves
@@ -41,6 +41,9 @@ Sub-account: That's Automated Heating and Air (locationId `dF6GpnV3NGdeZSjrnIRl`
 | Sep 25 | New Lead Owner Alert re-entry turned on; unhappy-reply owner alert switched from in-app to email | manual |
 | Sep 25 | Email test plan scenarios 1 to 4 run and passed (results below) | test |
 
+| Oct 2 | Live run for the walkthrough stills: two fresh leads through booking, stop on reply and the unhappy reply | test |
+| Oct 2 | Flag Unhappy Replies re-entry turned on. A contact who had replied once before was skipped on the second reply, so a later complaint was never flagged | manual |
+
 A2P is not needed for the demo. It stays on email; the SMS steps fail over to the SMS Fallback to Email workflow, which is itself part of what the demo shows.
 
 ## Test results (Sep 25, 2026, email)
@@ -54,6 +57,31 @@ Test lead: "Art Vandelay", `yourname+hvac1@gmail.com`, 334-555-0142 (a Gmail plu
 | 2 | Booking | Pass. Confirmation email with the right date and time, opportunity New lead to Booked in the same minute, event synced to Google Calendar |
 | 3 | Job done | Pass after fix. Review email with the review link, `review-sent` tag, opportunity to Review requested |
 | 4 | Unhappy reply during the review wait | Pass. Keyword matched, `replied-unhappy` tag, removed from Review Request before the review email, owner notified |
+
+## Walkthrough
+
+Stills from a live run on Oct 2, 2026, in the order the video follows. The demo runs on email: every text step fails and falls back to email. Two test leads, John Smith and Jane Doe, both on plus addresses.
+
+1. A one-truck heating and air company. Fictional business, real system.
+   ![Site hero](screenshots/01-site.png)
+2. A lead comes in from the website.
+   ![The site form filled in](screenshots/02-form.png)
+3. The text fails, so the same message goes out by email within a minute. The contact is tagged `sms-failed` and the opportunity is already in New lead.
+   ![Fallback email and the failed SMS in GHL](screenshots/03-fallback-email.png)
+4. An hour later the follow-up goes out with a booking link. They book, the confirmation arrives, and the visit is on the owner's Google Calendar.
+   ![Booking link email, confirmation email, calendar event](screenshots/05-booking.png)
+5. The lead moved to Booked on its own.
+   ![Service Pipeline board](screenshots/04-pipeline.png)
+6. The second lead replies "already found someone else" and the follow-up stops. Not paused, stopped.
+   ![The reply and the execution log](screenshots/07-stop-on-reply.png)
+7. Unhappy customer: no review request, the owner is alerted instead.
+   ![Tag, execution log and the owner alert email](screenshots/08-unhappy.png)
+8. The part nobody sees: a dedicated sending domain, so mail lands in the inbox.
+   ![Dedicated domain](screenshots/09-sending-domain.png)
+9. All native GHL workflows.
+   ![Workflows list](screenshots/06-workflows.png)
+
+`06-workflows.png` is two screenshots of the same list joined, because the list did not fit one screen. Two real names on other pipeline cards are blurred in `04-pipeline.png`.
 
 ## CRM spine
 
@@ -117,7 +145,7 @@ Cost: about $1 for generation plus one revision round.
 | mail | MX 10 | mxb.mailgun.org | inbound bounces |
 | _dmarc.mail | TXT | `v=DMARC1; p=none;` | DMARC (tighten to quarantine after a few clean sends) |
 
-GHL's Dedicated Domain screen shows all six as Verified. Sender is `reply@mail.thatsautomatedhvac.com`. First test email was Delivered per GHL but landed in Gmail spam; expected for a day-old domain with `p=none`.
+GHL's Dedicated Domain screen shows all six as Verified. The dedicated header sends as `hello@thatsautomatedhvac.com`. First test email was Delivered per GHL but landed in Gmail spam; expected for a day-old domain with `p=none`.
 
 ## Workflows
 
@@ -132,7 +160,7 @@ All published except where noted. Names in GHL match this table.
 | 5 | SMS Fallback to Email | SMS delivery failed | tag sms-failed, resend by email, owner alert |
 | 6 | New Lead Owner Alert | Form submitted | Lead Source = Website form, opportunity New lead, owner alert, acknowledgement text, webhook to n8n intake. Re-entry ON so a returning customer alerts the owner again |
 | 7 | Tag Stop Requests | Reply contains "stop" | tag stop-requested, remove from all workflows |
-| 8 | Flag Unhappy Replies | Customer replied, channel Email (switch to any channel once SMS is live) | keyword branch, tag replied-unhappy, remove from Review Request, email alert to the owner |
+| 8 | Flag Unhappy Replies | Customer replied, channel Email (switch to any channel once SMS is live) | keyword branch, tag replied-unhappy, remove from Review Request, email alert to the owner. Re-entry ON so every reply is checked, not just the first |
 | 9 | Customer Replied to Zapier | Customer replied | Webhook to project 08's responder. **Draft** while this demo is being recorded, so replies are not answered twice |
 
 Full build spec with message text: `workflow-build-spec.md` (see "As built" at the top for where the build differs).
@@ -187,6 +215,8 @@ Voice AI receptionist and Conversation AI (not yet built) are the only recurring
 - **`{{message.body}}` is empty on email replies and on the SMS-status trigger.** Use the trigger's replied-message field or leave the text out.
 - **Internal Notification type "Notification" is the in-app bell only.** For an owner who is out in the field, use type Email.
 - **Re-entry off is per contact, forever.** A contact that went through a workflow once is silently skipped the next time. Test with fresh contacts (Gmail plus addresses) instead of reusing one.
+- **Re-entry off breaks any workflow triggered by replies.** Flag Unhappy Replies ran on a contact's first reply, found nothing, and finished. Their second reply, the unhappy one, showed as "Add to workflow: Skipped" in the execution log. Turn re-entry on for reply-triggered workflows.
+- **Stop on response leaves no mark on the contact.** No tag, no message. The proof is in the workflow's execution log: "Removed by - Contact Reply Stop Response".
 - **Stop on response only counts replies that GHL matches to the same contact.** Replying from a different address than the contact's email files the reply elsewhere and the sequence keeps going.
 - **The synced Google Calendar's time zone shows in the customer's invite.** Set it to Central or the invite reads in UTC.
 - **Most GHL screens run in a cross-origin iframe** (form builder, site builder, AI Studio, workflow editor, business profile), which browser automation cannot click into. Pipelines, domains, and the contacts list render in the main app and can be driven. The public API covers fields, tags, custom values, calendars, contacts, and reading workflows, but not pipelines, forms, workflows, sites, or the business profile.
@@ -204,10 +234,12 @@ Before recording (all done Sep 27):
 For the recording, use a fresh plus address (for example `yourname+hvac2@gmail.com`). Art Vandelay has already been through the workflows and re-entry is off.
 
 Then:
-- Loom (email version of the script)
 - After recording, republish Customer Replied to Zapier or point it at the n8n responder
+- Fix the booking thank-you page, which still says "A text confirmation is on its way"
+- Reset the Oct 2 test data: John Smith (booked Oct 7, 9 AM, also on Google Calendar) and Jane Doe (Job done, tagged replied-unhappy)
 
 Later, optional:
 - A2P registration and an SMS rerun
-- Add the booking action to the Voice AI agent in the UI
 - Conversation AI, dashboard, snapshot
+
+The Voice AI receptionist is left out of this walkthrough and will be its own project.
